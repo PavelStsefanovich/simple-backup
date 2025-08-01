@@ -1,0 +1,16 @@
+# .smbkp.yaml - Place this file in the root of your backup drive/mount
+# This file identifies the drive/mount as a valid backup destination
+
+backup_drive: true
+version: "1.0"
+description: "Simple Backup Drive Configuration"
+
+# Optional: Additional metadata
+drive_info:
+  name: "My Backup Drive"
+  created: "2024-01-01"
+  
+# Optional: Drive-specific settings that could override config.yaml
+# settings:
+#   max_backup_size: "500gb"
+#   compression: false
