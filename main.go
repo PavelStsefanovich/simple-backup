@@ -58,7 +58,7 @@ func main() {
 		exitOnError    = flag.Bool("exit-on-error", false, "Exit immediately on any copy operation failure")
 		nonInteractive = flag.Bool("non-interactive", false, "Skip all user prompts")
 		configFile     = flag.String("config", "smbkp.config.yaml", "Path to configuration file")
-		runOnce        = flag.Bool("run-once", false, "Run backup once and exit (ignores schedule)")
+		runOnce        = flag.Bool("run-once", true, "Run backup once and exit (ignores schedule)")
 		help           = flag.Bool("help", false, "Show help")
 	)
 	flag.Parse()
@@ -68,18 +68,9 @@ func main() {
 		return
 	}
 
-	app := &BackupApp{
-		bkpDest:        *bkpDest,
-		exitOnError:    *exitOnError,
-		nonInteractive: *nonInteractive,
-	}
-
-	if err := app.loadConfig(*configFile); err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
-
-	if err := app.findBackupDestination(); err != nil {
-		log.Fatalf("Failed to find backup destination: %v", err)
+	app, err := NewBackupApp(*bkpDest, *configFile, *exitOnError, *nonInteractive)
+	if err != nil {
+		log.Fatalf("Failed to initialize application: %v", err)
 	}
 
 	if *runOnce || app.config.Schedule == nil {
@@ -107,6 +98,32 @@ func showHelp() {
 	fmt.Println("containing .smbkp.yaml in its root directory.")
 }
 
+func (c *Config) validate() error {
+	if c.Retention.BackupsToKeep < 1 {
+		return fmt.Errorf("retention.backups_to_keep must be 1 or greater")
+	}
+	// Future validation for MinFreeSpace format, schedule type, etc., can be added here.
+	return nil
+}
+
+func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive bool) (*BackupApp, error) {
+	app := &BackupApp{
+		bkpDest:        bkpDest,
+		exitOnError:    exitOnError,
+		nonInteractive: nonInteractive,
+	}
+
+	if err := app.loadConfig(configFile); err != nil {
+		return nil, err
+	}
+
+	if err := app.findBackupDestination(); err != nil {
+		return nil, err
+	}
+
+	return app, nil
+}
+
 func (app *BackupApp) loadConfig(configFile string) error {
 	data, err := os.ReadFile(configFile)
 	if err != nil {
@@ -123,6 +140,10 @@ func (app *BackupApp) loadConfig(configFile string) error {
 	}
 	if app.config.Retention.MinFreeSpace == "" {
 		app.config.Retention.MinFreeSpace = "1gb"
+	}
+
+	if err := app.config.validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	return nil
