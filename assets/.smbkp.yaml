@@ -9,7 +9,7 @@ description: "Simple Backup Drive Configuration"
 drive_info:
   name: "My Backup Drive"
   created: "2024-01-01"
-  
+
 # Optional: Drive-specific settings that could override config.yaml
 # settings:
 #   max_backup_size: "500gb"

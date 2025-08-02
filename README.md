@@ -108,7 +108,7 @@ description: "Simple Backup Drive Configuration"
 ## How It Works
 
 1. **Configuration Loading**: Reads the YAML configuration file
-2. **Destination Discovery**: 
+2. **Destination Discovery**:
    - If `-bkp-dest` is provided, uses that path
    - Otherwise, searches all available drives/mounts for `.smbkp.yaml`
 3. **Backup Execution**:

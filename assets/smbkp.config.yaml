@@ -11,7 +11,7 @@ bkp_root_dir: simple.backup
 
 #   # Interval for daily or weekly schedule (1 == every single one, 2 == every other one, etc.)
 #   interval: 1
-  
+
 #   # Required; Accepted format: 24-hour with leading zeros, separated by colon; e.g. 05:30, 11:06
 #   time: "21:00"
 
@@ -57,7 +57,7 @@ bkp_items:
 #   destination: 'D\GoogleDrive\MyDrive\Documents'
 #   include:
 #   - '.*'
-  
+
 # - source: 'D:\'
 #   destination: 'D'
 #   include:

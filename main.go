@@ -11,10 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"simple-backup/style"
 	"github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 )
 
+// Backup configuration
 type Config struct {
 	BkpRootDir string `yaml:"bkp_root_dir"`
 	Schedule   *struct {
@@ -30,6 +32,7 @@ type Config struct {
 	BkpItems []BackupItem `yaml:"bkp_items"`
 }
 
+// Each entry under 'bkp_items'
 type BackupItem struct {
 	Source      string   `yaml:"source"`
 	Destination string   `yaml:"destination"`
@@ -37,6 +40,7 @@ type BackupItem struct {
 	Exclude     []string `yaml:"exclude,omitempty"`
 }
 
+// Backup outcome tracking object
 type BackupResult struct {
 	Item    BackupItem
 	Success bool
@@ -44,6 +48,7 @@ type BackupResult struct {
 	Elapsed time.Duration
 }
 
+// Main application config
 type BackupApp struct {
 	config         Config
 	bkpDest        string
@@ -52,27 +57,44 @@ type BackupApp struct {
 	backupDir      string
 }
 
+
+// ENTRY POINT
 func main() {
+	// Command-line args
 	var (
-		bkpDest        = flag.String("bkp-dest", "", "Backup destination drive or mount")
-		exitOnError    = flag.Bool("exit-on-error", false, "Exit immediately on any copy operation failure")
-		nonInteractive = flag.Bool("non-interactive", false, "Skip all user prompts")
-		configFile     = flag.String("config", "smbkp.config.yaml", "Path to configuration file")
-		runOnce        = flag.Bool("run-once", true, "Run backup once and exit (ignores schedule)")
-		help           = flag.Bool("help", false, "Show help")
+		bkpDest           = flag.String("bkp-dest", "", "Backup destination drive or mount")
+		exitOnError       = flag.Bool("exit-on-error", false, "Exit immediately on any copy operation failure")
+		nonInteractive    = flag.Bool("non-interactive", false, "Skip all user prompts")
+		configFile        = flag.String("config", "", "Path to configuration file")
+		runOnce           = flag.Bool("run-once", true, "Run backup once and exit (ignores schedule)")
+		showHelp          = flag.Bool("help", false, "Show help")
+		showVersion       = flag.Bool("version", false, "Show version info")
 	)
 	flag.Parse()
 
-	if *help {
-		showHelp()
+	// Vars
+	configFileDefault := ".smbkp.yaml"
+	version			  := "v0.1.0"
+
+	// Show help
+	if *showHelp {
+		printHelp(configFileDefault)
 		return
 	}
 
-	app, err := NewBackupApp(*bkpDest, *configFile, *exitOnError, *nonInteractive)
+	// Show version
+	if *showVersion {
+		printVersion(version)
+		return
+	}
+
+	// Initiate main app
+	app, err := NewBackupApp(*bkpDest, *configFile, configFileDefault, *exitOnError, *nonInteractive)
 	if err != nil {
 		log.Fatalf("Failed to initialize application: %v", err)
 	}
 
+	// Run once
 	if *runOnce || app.config.Schedule == nil {
 		if err := app.runBackup(); err != nil {
 			log.Fatalf("Backup failed: %v", err)
@@ -84,18 +106,25 @@ func main() {
 	app.runScheduledBackup()
 }
 
-func showHelp() {
+func printHelp(configFileDefault string) {
 	fmt.Println()
-	fmt.Println("===============  Simple Backup  ===============")
+	style.Signature("===============  Simple Backup  ===============")
 	fmt.Println()
-	fmt.Println("Usage:")
+	style.Plain("Usage:")
 	fmt.Println("  smbkp [options]")
 	fmt.Println()
 	fmt.Println("Options:")
 	flag.PrintDefaults()
 	fmt.Println()
-	fmt.Println("If -bkp-dest is not provided, the app will search for a drive/mount")
-	fmt.Println("containing .smbkp.yaml in its root directory.")
+	style.Sub("If -bkp-dest is not provided, the app will search for a drive/mount")
+	style.Sub("containing '" + configFileDefault + "' in its root directory.")
+	fmt.Println()
+}
+
+func printVersion(version string) {
+	style.Signature("Simple Backup")
+	style.Plain(version)
+	fmt.Println()
 }
 
 func (c *Config) validate() error {
@@ -106,18 +135,26 @@ func (c *Config) validate() error {
 	return nil
 }
 
-func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive bool) (*BackupApp, error) {
+func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, nonInteractive bool) (*BackupApp, error) {
 	app := &BackupApp{
 		bkpDest:        bkpDest,
 		exitOnError:    exitOnError,
 		nonInteractive: nonInteractive,
 	}
 
-	if err := app.loadConfig(configFile); err != nil {
-		return nil, err
+	if configFile == "" {
+		configFile = configFileDefault
 	}
 
-	if err := app.findBackupDestination(); err != nil {
+
+	if err := app.loadConfig(configFile); err != nil {
+		if configFile != configFileDefault {
+			return nil, err
+		}
+		style.Warn("Default config file '%s' not found in the current directory.", configFileDefault)
+	}
+
+	if err := app.findBackupDestination(configFileDefault); err != nil {
 		return nil, err
 	}
 
@@ -149,7 +186,7 @@ func (app *BackupApp) loadConfig(configFile string) error {
 	return nil
 }
 
-func (app *BackupApp) findBackupDestination() error {
+func (app *BackupApp) findBackupDestination(configFileDefault string) error {
 	if app.bkpDest != "" {
 		// Verify the provided destination
 		if _, err := os.Stat(app.bkpDest); os.IsNotExist(err) {
@@ -165,16 +202,16 @@ func (app *BackupApp) findBackupDestination() error {
 	}
 
 	for _, drive := range drives {
-		configPath := filepath.Join(drive, ".smbkp.yaml")
+		configPath := filepath.Join(drive, configFileDefault)
 		if _, err := os.Stat(configPath); err == nil {
 			// Found a valid backup destination
 			app.bkpDest = drive
-			fmt.Printf("Found backup destination: %s\n", drive)
+			fmt.Printf("Found backup destination with valid config file: %s\n", drive)
 			return nil
 		}
 	}
 
-	return fmt.Errorf("no backup destination found with .smbkp.yaml")
+	return fmt.Errorf("no backup destination found. Place '.smbkp.yaml' in the root of the destination drive or use the -bkp-dest flag")
 }
 
 func (app *BackupApp) getAvailableDrives() ([]string, error) {
