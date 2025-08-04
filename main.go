@@ -16,6 +16,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Limits
+const (
+	LimitMinFreeSpace string = "1gb"
+	LimitMinBackupsToKeep int 	= 1
+)
+
 // Backup configuration
 type Config struct {
 	BkpRootDir string `yaml:"bkp_root_dir"`
@@ -50,22 +56,22 @@ type BackupResult struct {
 
 // Main application config
 type BackupApp struct {
-	config         Config
-	bkpDest        string
-	exitOnError    bool
-	nonInteractive bool
-	backupDir      string
+	config          Config
+	configFile		string
+	bkpDest         string
+	exitOnError     bool
+	nonInteractive  bool
+	backupDir       string
 }
-
 
 // ENTRY POINT
 func main() {
 	// Command-line args
 	var (
-		bkpDest           = flag.String("bkp-dest", "", "Backup destination drive or mount")
+		configFile        = flag.String("config", "", "Path to configuration file")
+		bkpDest           = flag.String("bkp-dest", "", "Backup destination drive or mount. Required if -config is specified.")
 		exitOnError       = flag.Bool("exit-on-error", false, "Exit immediately on any copy operation failure")
 		nonInteractive    = flag.Bool("non-interactive", false, "Skip all user prompts")
-		configFile        = flag.String("config", "", "Path to configuration file")
 		runOnce           = flag.Bool("run-once", true, "Run backup once and exit (ignores schedule)")
 		showHelp          = flag.Bool("help", false, "Show help")
 		showVersion       = flag.Bool("version", false, "Show version info")
@@ -91,9 +97,14 @@ func main() {
 	// Initiate main app
 	app, err := NewBackupApp(*bkpDest, *configFile, configFileDefault, *exitOnError, *nonInteractive)
 	if err != nil {
-		log.Fatalf("Failed to initialize application: %v", err)
+		style.Err("Failed to initialize application: %v", err)
+		os.Exit(1)
+		// log.Fatalf("Failed to initialize application: %v", err)
+		// return
 	}
-
+	//DELETE (debug) current end
+	style.Info("This is the end (currently)")
+	return
 	// Run once
 	if *runOnce || app.config.Schedule == nil {
 		if err := app.runBackup(); err != nil {
@@ -106,6 +117,7 @@ func main() {
 	app.runScheduledBackup()
 }
 
+// PRINT HELP
 func printHelp(configFileDefault string) {
 	fmt.Println()
 	style.Signature("===============  Simple Backup  ===============")
@@ -116,25 +128,46 @@ func printHelp(configFileDefault string) {
 	fmt.Println("Options:")
 	flag.PrintDefaults()
 	fmt.Println()
-	style.Sub("If -bkp-dest is not provided, the app will search for a drive/mount")
-	style.Sub("containing '" + configFileDefault + "' in its root directory.")
+	style.Sub("If -bkp-dest is not provided, the app will search for the first drive/mount")
+	style.Sub("that contains '" + configFileDefault + "' file in its root directory.")
 	fmt.Println()
 }
 
+// PRINT VERSION
 func printVersion(version string) {
 	style.Signature("Simple Backup")
 	style.Plain(version)
 	fmt.Println()
 }
 
+// VALIDATE MAIN APP CONFIG
 func (c *Config) validate() error {
-	if c.Retention.BackupsToKeep < 1 {
-		return fmt.Errorf("retention.backups_to_keep must be 1 or greater")
+	if c.Retention.BackupsToKeep < LimitMinBackupsToKeep {
+		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.", "backups_to_keep", c.Retention.BackupsToKeep, LimitMinBackupsToKeep)
+		style.WarnLite(msg)
+		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
+	}
+
+	if c.Retention.MinFreeSpace == "" {
+		c.Retention.MinFreeSpace = LimitMinFreeSpace
 	}
 	// Future validation for MinFreeSpace format, schedule type, etc., can be added here.
+	// return fmt.Errorf("retention.backups_to_keep must be 1 or greater")
+	//LimitMinFreeSpace string = "1gb"
+	//LimitMinBackupsToKeep int 	= 1
+
+	// if app.bkpDest != "" {
+	// 	// Verify the provided destination
+	// 	if _, err := os.Stat(app.bkpDest); os.IsNotExist(err) {
+	// 		return "", fmt.Errorf("backup destination %s does not exist", app.bkpDest)
+	// 	}
+	// 	configPath := filepath.Join(app.bkpDest, configFileDefault)
+	// 	return configPath, nil
+	// }
 	return nil
 }
 
+// MAIN APP INIT
 func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, nonInteractive bool) (*BackupApp, error) {
 	app := &BackupApp{
 		bkpDest:        bkpDest,
@@ -142,76 +175,104 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 		nonInteractive: nonInteractive,
 	}
 
-	if configFile == "" {
-		configFile = configFileDefault
+	// Case: Backup Destination explicitly specified by user
+	if bkpDest != "" {
+		if _, err := os.Stat(bkpDest); os.IsNotExist(err) {
+			return nil, fmt.Errorf("specified backup destination %q does not exist", bkpDest)
+		}
+		app.bkpDest = bkpDest
 	}
 
-
-	if err := app.loadConfig(configFile); err != nil {
-		if configFile != configFileDefault {
+	// Case: Config File explicitly specified by user
+	if configFile != "" {
+		// Case: Config File explicitly specified by User, but Backup Destination is NOT
+		if app.bkpDest == "" {
+			return nil, fmt.Errorf("%q is not provided, but it is required when %q is specified", "-bkp-dest", "-config")
+		}
+		// Case: Both Config File and Backup Destination explicitly specified by user
+		if err := app.loadConfig(configFile); err != nil {
 			return nil, err
 		}
-		style.Warn("Default config file '%s' not found in the current directory.", configFileDefault)
 	}
 
-	if err := app.findBackupDestination(configFileDefault); err != nil {
+	err := app.setBackupDestination(configFileDefault)
+	if err != nil {
 		return nil, err
 	}
 
 	return app, nil
 }
 
+// LOAD MAIN CONFIG
 func (app *BackupApp) loadConfig(configFile string) error {
+	style.Plain("Reading config file %q", configFile)
 	data, err := os.ReadFile(configFile)
 	if err != nil {
+		if perr, ok := err.(*os.PathError); ok { // this wrapper code allows to parse the error and enquote file path
+			return fmt.Errorf("%s %q: %v", perr.Op, perr.Path, perr.Err)
+		}
 		return fmt.Errorf("reading config file: %w", err)
 	}
 
 	if err := yaml.Unmarshal(data, &app.config); err != nil {
 		return fmt.Errorf("parsing config file: %w", err)
 	}
-
+	//DELETE Moved to a dedicated validation function
 	// Set defaults
-	if app.config.Retention.BackupsToKeep == 0 {
-		app.config.Retention.BackupsToKeep = 1
-	}
-	if app.config.Retention.MinFreeSpace == "" {
-		app.config.Retention.MinFreeSpace = "1gb"
-	}
+	// if app.config.Retention.BackupsToKeep == 0 {
+	// 	app.config.Retention.BackupsToKeep = 1
+	// }
+	// if app.config.Retention.MinFreeSpace == "" {
+	// 	app.config.Retention.MinFreeSpace = "1gb"
+	// }
 
 	if err := app.config.validate(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
+	app.configFile = configFile
 	return nil
 }
 
-func (app *BackupApp) findBackupDestination(configFileDefault string) error {
-	if app.bkpDest != "" {
-		// Verify the provided destination
-		if _, err := os.Stat(app.bkpDest); os.IsNotExist(err) {
-			return fmt.Errorf("backup destination %s does not exist", app.bkpDest)
+func (app *BackupApp) setBackupDestination(configFileDefault string) (error) {
+	// Case: Backup Destination is NOT specified
+	// (this means that Config File is NOT specified ether)
+	if app.bkpDest == "" {
+		// Get available drives and mount points
+		style.InfoLite("%q is not specified", "-bkp-dest")
+		style.Plain("Getting available drives and common mount points...")
+		drives, err := app.getAvailableDrives()
+		if err != nil {
+			return fmt.Errorf("getting available drives: %w", err)
 		}
-		return nil
+
+		// Search for the first destination with default backup config file in it's root
+		style.Plain("Searching for %q file in the root of available drives and mount points...", configFileDefault)
+		for _, drive := range drives {
+			configFile := filepath.Join(drive, configFileDefault)
+			if _, err := os.Stat(configFile); err == nil {
+				// Found a backup destination candidate
+				style.Plain("Found potential backup destination: %s", drive)
+				if err := app.loadConfig(configFile); err != nil {
+					return err
+				}
+				app.bkpDest = drive
+				return nil
+			}
+		}
+
+		return fmt.Errorf("no backup destination found. Place '.smbkp.yaml' in the root of the destination drive or use the -bkp-dest flag")
 	}
 
-	// Search for backup destination
-	drives, err := app.getAvailableDrives()
-	if err != nil {
-		return fmt.Errorf("getting available drives: %w", err)
-	}
-
-	for _, drive := range drives {
-		configPath := filepath.Join(drive, configFileDefault)
-		if _, err := os.Stat(configPath); err == nil {
-			// Found a valid backup destination
-			app.bkpDest = drive
-			fmt.Printf("Found backup destination with valid config file: %s\n", drive)
-			return nil
+	// Case: Backup Destination is explicitly specified by user, but Config File is NOT
+	if app.configFile == "" {
+		configFile := filepath.Join(app.bkpDest, configFileDefault)
+		if err := app.loadConfig(configFile); err != nil {
+			return err
 		}
 	}
-
-	return fmt.Errorf("no backup destination found. Place '.smbkp.yaml' in the root of the destination drive or use the -bkp-dest flag")
+	
+	return nil
 }
 
 func (app *BackupApp) getAvailableDrives() ([]string, error) {

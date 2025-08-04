@@ -39,6 +39,11 @@ func Sub(format string, a ...any) {
     fmt.Println(_subMsg(msg))
 }
 
+func Prompt(format string, a ...any) {
+    msg := fmt.Sprintf(format, a...)
+    fmt.Print(_info("\n%s", msg))
+}
+
 func InfoLite(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_info("[INFO]"), msg)
@@ -46,7 +51,7 @@ func InfoLite(format string, a ...any) {
 
 func Info(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
-    fmt.Println(_info("[INFO]"), _bold(msg))
+    fmt.Println(_info("[INFO]"), _info(msg))
 }
 
 func WarnLite(format string, a ...any) {
