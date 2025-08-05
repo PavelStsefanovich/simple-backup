@@ -177,9 +177,16 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 
 	// Case: Backup Destination explicitly specified by user
 	if bkpDest != "" {
-		if _, err := os.Stat(bkpDest); os.IsNotExist(err) {
-			return nil, fmt.Errorf("specified backup destination %q does not exist", bkpDest)
+		style.Plain("Trying to access specified backup destination %q... ", bkpDest)
+		_, err := os.Stat(bkpDest)
+		if err != nil {
+			style.PlainLn("")
+			if perr, ok := err.(*os.PathError); ok { // this wrapper code allows to parse the error and enquote file path
+				return nil, fmt.Errorf("%q: %v", perr.Path, perr.Err)
+			}
+			return nil, fmt.Errorf("accessing backup destination: %w", err)
 		}
+		style.Ok("")
 		app.bkpDest = bkpDest
 	}
 
@@ -190,6 +197,7 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 			return nil, fmt.Errorf("%q is not provided, but it is required when %q is specified", "-bkp-dest", "-config")
 		}
 		// Case: Both Config File and Backup Destination explicitly specified by user
+		style.Plain("Reading specified config file %q... ", configFile)
 		if err := app.loadConfig(configFile); err != nil {
 			return nil, err
 		}
@@ -205,14 +213,15 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 
 // LOAD MAIN CONFIG
 func (app *BackupApp) loadConfig(configFile string) error {
-	style.Plain("Reading config file %q", configFile)
 	data, err := os.ReadFile(configFile)
 	if err != nil {
+		style.PlainLn("")
 		if perr, ok := err.(*os.PathError); ok { // this wrapper code allows to parse the error and enquote file path
-			return fmt.Errorf("%s %q: %v", perr.Op, perr.Path, perr.Err)
+			return fmt.Errorf("%q: %v", perr.Path, perr.Err)
 		}
 		return fmt.Errorf("reading config file: %w", err)
 	}
+	style.Ok("")
 
 	if err := yaml.Unmarshal(data, &app.config); err != nil {
 		return fmt.Errorf("parsing config file: %w", err)
@@ -227,6 +236,7 @@ func (app *BackupApp) loadConfig(configFile string) error {
 	// }
 
 	if err := app.config.validate(); err != nil {
+		style.PlainLn("")
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
@@ -239,20 +249,23 @@ func (app *BackupApp) setBackupDestination(configFileDefault string) (error) {
 	// (this means that Config File is NOT specified ether)
 	if app.bkpDest == "" {
 		// Get available drives and mount points
-		style.InfoLite("%q is not specified", "-bkp-dest")
-		style.Plain("Getting available drives and common mount points...")
+		style.InfoLite("%q is not specified.", "-bkp-dest")
+		style.Plain("Retrieving available drives and common mount points... ")
 		drives, err := app.getAvailableDrives()
 		if err != nil {
+			style.PlainLn("")
 			return fmt.Errorf("getting available drives: %w", err)
 		}
+		style.Ok("")
 
 		// Search for the first destination with default backup config file in it's root
-		style.Plain("Searching for %q file in the root of available drives and mount points...", configFileDefault)
+		style.Plain("Searching for %q file in the root of available drives and mount points... ", configFileDefault)
 		for _, drive := range drives {
 			configFile := filepath.Join(drive, configFileDefault)
 			if _, err := os.Stat(configFile); err == nil {
 				// Found a backup destination candidate
-				style.Plain("Found potential backup destination: %s", drive)
+				style.Ok("")
+				style.Plain("Reading config file %q... ", configFile)
 				if err := app.loadConfig(configFile); err != nil {
 					return err
 				}
@@ -261,17 +274,20 @@ func (app *BackupApp) setBackupDestination(configFileDefault string) (error) {
 			}
 		}
 
+		style.PlainLn("")
 		return fmt.Errorf("no backup destination found. Place '.smbkp.yaml' in the root of the destination drive or use the -bkp-dest flag")
 	}
 
 	// Case: Backup Destination is explicitly specified by user, but Config File is NOT
 	if app.configFile == "" {
 		configFile := filepath.Join(app.bkpDest, configFileDefault)
+		style.InfoLite("%q is not specified. Assuming default config file in the root of backup destination.", "-config")
+		style.Plain("Reading assumed config file %q... ", configFile)
 		if err := app.loadConfig(configFile); err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
