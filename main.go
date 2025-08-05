@@ -203,9 +203,49 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 		}
 	}
 
-	err := app.setBackupDestination(configFileDefault)
-	if err != nil {
-		return nil, err
+	// Case: Backup Destination is NOT specified
+	// (this means that Config File is NOT specified ether)
+	if app.bkpDest == "" {
+		// Get available drives and mount points
+		style.InfoLite("%q is not specified.", "-bkp-dest")
+		style.Plain("Retrieving available drives and common mount points... ")
+		drives, err := app.getAvailableDrives()
+		if err != nil {
+			style.PlainLn("")
+			return nil, fmt.Errorf("getting available drives: %w", err)
+		}
+		style.Ok("")
+
+		// Search for the first destination with default backup config file in it's root
+		style.Plain("Searching for %q file in the root of available drives and mount points... ", configFileDefault)
+		for _, drive := range drives {
+			configFile := filepath.Join(drive, configFileDefault)
+			if _, err := os.Stat(configFile); err == nil {
+				// Found a backup destination candidate
+				style.Ok("")
+				style.Plain("Reading config file %q... ", configFile)
+				if err := app.loadConfig(configFile); err != nil {
+					return nil, err
+				}
+				app.bkpDest = drive
+				break
+			}
+		}
+
+		if app.bkpDest == "" {
+			style.PlainLn("")
+			return nil, fmt.Errorf("no backup destination found. Place '.smbkp.yaml' in the root of the destination drive or use the -bkp-dest flag")
+		}
+	}
+
+	// Case: Backup Destination is explicitly specified by user, but Config File is NOT
+	if app.configFile == "" {
+		configFile := filepath.Join(app.bkpDest, configFileDefault)
+		style.InfoLite("%q is not specified. Assuming default config file in the root of backup destination.", "-config")
+		style.Plain("Reading assumed config file %q... ", configFile)
+		if err := app.loadConfig(configFile); err != nil {
+			return nil, err
+		}
 	}
 
 	return app, nil
@@ -244,53 +284,7 @@ func (app *BackupApp) loadConfig(configFile string) error {
 	return nil
 }
 
-func (app *BackupApp) setBackupDestination(configFileDefault string) (error) {
-	// Case: Backup Destination is NOT specified
-	// (this means that Config File is NOT specified ether)
-	if app.bkpDest == "" {
-		// Get available drives and mount points
-		style.InfoLite("%q is not specified.", "-bkp-dest")
-		style.Plain("Retrieving available drives and common mount points... ")
-		drives, err := app.getAvailableDrives()
-		if err != nil {
-			style.PlainLn("")
-			return fmt.Errorf("getting available drives: %w", err)
-		}
-		style.Ok("")
-
-		// Search for the first destination with default backup config file in it's root
-		style.Plain("Searching for %q file in the root of available drives and mount points... ", configFileDefault)
-		for _, drive := range drives {
-			configFile := filepath.Join(drive, configFileDefault)
-			if _, err := os.Stat(configFile); err == nil {
-				// Found a backup destination candidate
-				style.Ok("")
-				style.Plain("Reading config file %q... ", configFile)
-				if err := app.loadConfig(configFile); err != nil {
-					return err
-				}
-				app.bkpDest = drive
-				return nil
-			}
-		}
-
-		style.PlainLn("")
-		return fmt.Errorf("no backup destination found. Place '.smbkp.yaml' in the root of the destination drive or use the -bkp-dest flag")
-	}
-
-	// Case: Backup Destination is explicitly specified by user, but Config File is NOT
-	if app.configFile == "" {
-		configFile := filepath.Join(app.bkpDest, configFileDefault)
-		style.InfoLite("%q is not specified. Assuming default config file in the root of backup destination.", "-config")
-		style.Plain("Reading assumed config file %q... ", configFile)
-		if err := app.loadConfig(configFile); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
+// PROVIDE OS-SPECIFIC COMMON DRIVES OR MOUNT POINTS
 func (app *BackupApp) getAvailableDrives() ([]string, error) {
 	var drives []string
 
