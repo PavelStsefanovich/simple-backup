@@ -19,66 +19,85 @@ var (
     _okMsg      = color.New(color.FgGreen).SprintFunc()
 )
 
+// Print message in app signature color
 func Signature(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_signature(msg))
 }
 
+// Print message without styling and without new line
 func Plain(format string, a ...any) {
+    msg := fmt.Sprintf(format, a...)
+    fmt.Print(_plain(msg))
+}
+
+// Print message without styling
+func PlainLn(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_plain(msg))
 }
 
+// Pring message in bold
 func Bold(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_bold(msg))
 }
 
+// Print message in soft gray
 func Sub(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_subMsg(msg))
 }
 
+// Print user prompt message
 func Prompt(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Print(_info("\n%s", msg))
 }
 
+// Print info message with partial styling
 func InfoLite(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_info("[INFO]"), msg)
 }
 
+// Print info message with full styling
 func Info(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_info("[INFO]"), _info(msg))
 }
 
+// Print warning message with partial styling
 func WarnLite(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_warn("[WARN]"), msg)
 }
 
+// Print warning message with full styling
 func Warn(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_warn("[WARN]"), _warnMsg(msg))
 }
 
+// Print error message with partial styling
 func ErrLite(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_error("[ERROR]"), msg)
 }
 
+// Print error message with full styling
 func Err(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_error("[ERROR]"), _errorMsg(msg))
 }
 
+// Print success message with partial styling
 func Ok(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_okMsg("[OK]"), msg)
 }
 
+// Print success message with full styling
 func Success(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
     fmt.Println(_success("[SUCCESS]"), _okMsg(msg))
