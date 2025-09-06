@@ -60,7 +60,7 @@ type BackupResult struct {
 
 // Main application config
 type BackupApp struct {
-	config          Config
+	bkpConfig          Config
 	configFile		string
 	bkpDest         string
 	exitOnError     bool
@@ -110,7 +110,7 @@ func main() {
 	style.Info("This is the end (currently)")
 	return
 	// Run once
-	if *runOnce || app.config.Schedule == nil {
+	if *runOnce || app.bkpConfig.Schedule == nil {
 		if err := app.runBackup(); err != nil {
 			log.Fatalf("Backup failed: %v", err)
 		}
@@ -147,7 +147,7 @@ func printVersion(version string) {
 // MAIN APP INIT
 func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, nonInteractive bool) (*BackupApp, error) {
 	app := &BackupApp{
-		config:         *NewConfig(), // Set defaults first
+		bkpConfig:		*NewConfig(), // Set defaults first
 		bkpDest:        bkpDest,
 		exitOnError:    exitOnError,
 		nonInteractive: nonInteractive,
@@ -194,6 +194,11 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 		}
 		style.Ok("")
 
+		// Print found destinations
+		for _, drive := range drives {
+			style.Sub("  %s", drive)
+		}		
+
 		// Search for the first destination with default backup config file in it's root
 		style.Plain("Searching for %q file in the root of available drives and mount points... ", configFileDefault)
 		for _, drive := range drives {
@@ -232,7 +237,7 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 // NewConfig creates a new Config struct with default values.
 func NewConfig() *Config {
 	return &Config{
-		BkpRootDir: "backups",
+		BkpRootDir: ".",
 		Retention: struct {
 			BackupsToKeep int    `yaml:"backups_to_keep"`
 			MinFreeSpace  string `yaml:"min_free_space"`
@@ -256,11 +261,11 @@ func (app *BackupApp) loadConfig(configFile string) error {
 	}
 	style.Ok("")
 
-	if err := yaml.Unmarshal(data, &app.config); err != nil {
+	if err := yaml.Unmarshal(data, &app.bkpConfig); err != nil {
 		return fmt.Errorf("parsing config file: %w", err)
 	}
 
-	if err := app.config.validate(); err != nil {
+	if err := app.bkpConfig.validate(); err != nil {
 		style.PlainLn("")
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
@@ -278,8 +283,7 @@ func (c *Config) validate() error {
 		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
 	}
 
-	// Validate MinFreeSpace format. This will correctly fail on an empty string
-	// if the user explicitly provides one, which is the desired behavior.
+	// Validate MinFreeSpace format. This will fail on an empty string if the user explicitly provides one
 	re := regexp.MustCompile(MinFreeSpacePattern)
 	if !re.MatchString(strings.ToLower(c.Retention.MinFreeSpace)) {
 		return fmt.Errorf(
@@ -376,7 +380,7 @@ func (app *BackupApp) runScheduledBackup() {
 }
 
 func (app *BackupApp) buildCronExpression() string {
-	schedule := app.config.Schedule
+	schedule := app.bkpConfig.Schedule
 	timeParts := strings.Split(schedule.Time, ":")
 	hour := timeParts[0]
 	minute := timeParts[1]
@@ -405,12 +409,12 @@ func (app *BackupApp) runBackup() error {
 
 	// Create backup directory
 	timestamp := time.Now().Format("20060102-150405")
-	app.backupDir = filepath.Join(app.bkpDest, app.config.BkpRootDir, fmt.Sprintf("psbkp-%s", timestamp))
+	app.backupDir = filepath.Join(app.bkpDest, app.bkpConfig.BkpRootDir, fmt.Sprintf("psbkp-%s", timestamp))
 
 	fmt.Printf("\n=== Backup Configuration ===\n")
 	fmt.Printf("Backup destination: %s\n", app.bkpDest)
 	fmt.Printf("Backup directory: %s\n", app.backupDir)
-	fmt.Printf("Items to backup: %d\n", len(app.config.BkpItems))
+	fmt.Printf("Items to backup: %d\n", len(app.bkpConfig.BkpItems))
 	fmt.Printf("Exit on error: %t\n", app.exitOnError)
 
 	if !app.nonInteractive {
@@ -434,8 +438,8 @@ func (app *BackupApp) runBackup() error {
 	var results []BackupResult
 	var failedCount int
 
-	for i, item := range app.config.BkpItems {
-		fmt.Printf("\n[%d/%d] Backing up: %s\n", i+1, len(app.config.BkpItems), item.Source)
+	for i, item := range app.bkpConfig.BkpItems {
+		fmt.Printf("\n[%d/%d] Backing up: %s\n", i+1, len(app.bkpConfig.BkpItems), item.Source)
 
 		itemStart := time.Now()
 		err := app.backupItem(item)
@@ -629,7 +633,7 @@ func (app *BackupApp) copyFile(src, dest string) error {
 }
 
 func (app *BackupApp) cleanupOldBackups() error {
-	backupRoot := filepath.Join(app.bkpDest, app.config.BkpRootDir)
+	backupRoot := filepath.Join(app.bkpDest, app.bkpConfig.BkpRootDir)
 
 	entries, err := os.ReadDir(backupRoot)
 	if err != nil {
@@ -643,13 +647,13 @@ func (app *BackupApp) cleanupOldBackups() error {
 		}
 	}
 
-	if len(backupDirs) <= app.config.Retention.BackupsToKeep {
+	if len(backupDirs) <= app.bkpConfig.Retention.BackupsToKeep {
 		return nil
 	}
 
 	// Sort by name (which includes timestamp) and remove oldest
 	// Note: This is a simplified approach. For production, you might want more sophisticated sorting
-	toDelete := len(backupDirs) - app.config.Retention.BackupsToKeep
+	toDelete := len(backupDirs) - app.bkpConfig.Retention.BackupsToKeep
 	for i := 0; i < toDelete; i++ {
 		dirPath := filepath.Join(backupRoot, backupDirs[i].Name())
 		fmt.Printf("Removing old backup: %s\n", dirPath)
