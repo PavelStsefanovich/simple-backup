@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"path/filepath"
 	"runtime"
+	// "strconv"
 	"strings"
 	"time"
 
@@ -18,8 +20,9 @@ import (
 
 // Limits
 const (
-	LimitMinFreeSpace string = "1gb"
-	LimitMinBackupsToKeep int 	= 1
+	LimitMinFreeSpace string	= "1mb"
+	MinFreeSpacePattern	string	= `^\d+(mb|gb)$`
+	LimitMinBackupsToKeep int	= 1
 )
 
 // Backup configuration
@@ -32,8 +35,9 @@ type Config struct {
 		Time      string `yaml:"time"`
 	} `yaml:"schedule,omitempty"`
 	Retention struct {
-		BackupsToKeep int    `yaml:"backups_to_keep"`
-		MinFreeSpace  string `yaml:"min_free_space"`
+		BackupsToKeep 	int    `yaml:"backups_to_keep"`
+		MinFreeSpace  	string `yaml:"min_free_space"`
+		// MinFreeSpaceMb	int
 	} `yaml:"retention"`
 	BkpItems []BackupItem `yaml:"bkp_items"`
 }
@@ -140,33 +144,6 @@ func printVersion(version string) {
 	fmt.Println()
 }
 
-// VALIDATE MAIN APP CONFIG
-func (c *Config) validate() error {
-	if c.Retention.BackupsToKeep < LimitMinBackupsToKeep {
-		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.", "backups_to_keep", c.Retention.BackupsToKeep, LimitMinBackupsToKeep)
-		style.WarnLite(msg)
-		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
-	}
-
-	if c.Retention.MinFreeSpace == "" {
-		c.Retention.MinFreeSpace = LimitMinFreeSpace
-	}
-	// Future validation for MinFreeSpace format, schedule type, etc., can be added here.
-	// return fmt.Errorf("retention.backups_to_keep must be 1 or greater")
-	//LimitMinFreeSpace string = "1gb"
-	//LimitMinBackupsToKeep int 	= 1
-
-	// if app.bkpDest != "" {
-	// 	// Verify the provided destination
-	// 	if _, err := os.Stat(app.bkpDest); os.IsNotExist(err) {
-	// 		return "", fmt.Errorf("backup destination %s does not exist", app.bkpDest)
-	// 	}
-	// 	configPath := filepath.Join(app.bkpDest, configFileDefault)
-	// 	return configPath, nil
-	// }
-	return nil
-}
-
 // MAIN APP INIT
 func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, nonInteractive bool) (*BackupApp, error) {
 	app := &BackupApp{
@@ -251,6 +228,7 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 	return app, nil
 }
 
+
 // LOAD MAIN CONFIG
 func (app *BackupApp) loadConfig(configFile string) error {
 	data, err := os.ReadFile(configFile)
@@ -266,14 +244,6 @@ func (app *BackupApp) loadConfig(configFile string) error {
 	if err := yaml.Unmarshal(data, &app.config); err != nil {
 		return fmt.Errorf("parsing config file: %w", err)
 	}
-	//DELETE Moved to a dedicated validation function
-	// Set defaults
-	// if app.config.Retention.BackupsToKeep == 0 {
-	// 	app.config.Retention.BackupsToKeep = 1
-	// }
-	// if app.config.Retention.MinFreeSpace == "" {
-	// 	app.config.Retention.MinFreeSpace = "1gb"
-	// }
 
 	if err := app.config.validate(); err != nil {
 		style.PlainLn("")
@@ -283,6 +253,84 @@ func (app *BackupApp) loadConfig(configFile string) error {
 	app.configFile = configFile
 	return nil
 }
+
+// VALIDATE MAIN APP CONFIG
+func (c *Config) validate() error {
+	// Number of backups to keep
+	if c.Retention.BackupsToKeep < LimitMinBackupsToKeep {
+		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.", "backups_to_keep", c.Retention.BackupsToKeep, LimitMinBackupsToKeep)
+		style.WarnLite(msg)
+		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
+	}
+
+	// Min free space in backup destination
+	if c.Retention.MinFreeSpace == "" {
+		c.Retention.MinFreeSpace = "0mb"
+	}
+
+	// Validate MinFreeSpace format
+	re := regexp.MustCompile(MinFreeSpacePattern)
+	if !re.MatchString(strings.ToLower(c.Retention.MinFreeSpace)) {
+		return fmt.Errorf(
+			"%q value %q has invalid format. Expected format is a number followed by 'mb' or 'gb' (e.g., '100mb', '10gb')",
+			"min_free_space",
+			c.Retention.MinFreeSpace,
+		)
+	}
+
+	// 
+	if c.Retention.MinFreeSpace == "" {
+		msg := fmt.Sprintf("%q value is not provided; setting to '%s', which is allowed minimum.", "min_free_space", LimitMinFreeSpace)
+		style.WarnLite(msg)
+		c.Retention.MinFreeSpace = LimitMinFreeSpace
+	}
+
+	// Future validation for schedule type, etc., can be added here.
+	// if app.bkpDest != "" {
+	// 	// Verify the provided destination
+	// 	if _, err := os.Stat(app.bkpDest); os.IsNotExist(err) {
+	// 		return "", fmt.Errorf("backup destination %s does not exist", app.bkpDest)
+	// 	}
+	// 	configPath := filepath.Join(app.bkpDest, configFileDefault)
+	// 	return configPath, nil
+	// }
+
+	//DELETE Moved to a dedicated validation function
+	// Set defaults
+	// if app.config.Retention.BackupsToKeep == 0 {
+	// 	app.config.Retention.BackupsToKeep = 1
+	// }
+	// if app.config.Retention.MinFreeSpace == "" {
+	// 	app.config.Retention.MinFreeSpace = "1gb"
+	// }
+	return nil
+}
+
+// PARSE DISK SIZE STRING
+// func parseDiskSize(sizeStr string) (int64, error) {
+// 	sizeStr = strings.ToLower(strings.TrimSpace(sizeStr))
+
+// 	var multiplier int64
+// 	var valueStr string
+
+// 	switch {
+// 	case strings.HasSuffix(sizeStr, "mb"):
+// 		multiplier = 1024 * 1024
+// 		valueStr = strings.TrimSuffix(sizeStr, "mb")
+// 	case strings.HasSuffix(sizeStr, "gb"):
+// 		multiplier = 1024 * 1024 * 1024
+// 		valueStr = strings.TrimSuffix(sizeStr, "gb")
+// 	default:
+// 		return 0, errors.New("invalid format: must end with 'mb' or 'gb'")
+// 	}
+
+// 	num, err := strconv.ParseInt(strings.TrimSpace(valueStr), 10, 64)
+// 	if err != nil {
+// 		return 0, fmt.Errorf("invalid number value: %w", err)
+// 	}
+
+// 	return num * multiplier, nil
+// }
 
 // PROVIDE OS-SPECIFIC COMMON DRIVES OR MOUNT POINTS
 func (app *BackupApp) getAvailableDrives() ([]string, error) {
