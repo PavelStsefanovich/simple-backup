@@ -20,7 +20,7 @@ import (
 
 // Limits
 const (
-	LimitMinFreeSpace string	= "1mb"
+	LimitMinFreeSpace string	= "10mb"
 	MinFreeSpacePattern	string	= `^\d+(mb|gb)$`
 	LimitMinBackupsToKeep int	= 1
 )
@@ -147,6 +147,7 @@ func printVersion(version string) {
 // MAIN APP INIT
 func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, nonInteractive bool) (*BackupApp, error) {
 	app := &BackupApp{
+		config:         *NewConfig(), // Set defaults first
 		bkpDest:        bkpDest,
 		exitOnError:    exitOnError,
 		nonInteractive: nonInteractive,
@@ -228,6 +229,20 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 	return app, nil
 }
 
+// NewConfig creates a new Config struct with default values.
+func NewConfig() *Config {
+	return &Config{
+		BkpRootDir: "backups",
+		Retention: struct {
+			BackupsToKeep int    `yaml:"backups_to_keep"`
+			MinFreeSpace  string `yaml:"min_free_space"`
+		}{
+			BackupsToKeep: LimitMinBackupsToKeep,
+			MinFreeSpace:  LimitMinFreeSpace,
+		},
+		BkpItems: []BackupItem{},
+	}
+}
 
 // LOAD MAIN CONFIG
 func (app *BackupApp) loadConfig(configFile string) error {
@@ -263,12 +278,8 @@ func (c *Config) validate() error {
 		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
 	}
 
-	// Min free space in backup destination
-	if c.Retention.MinFreeSpace == "" {
-		c.Retention.MinFreeSpace = "0mb"
-	}
-
-	// Validate MinFreeSpace format
+	// Validate MinFreeSpace format. This will correctly fail on an empty string
+	// if the user explicitly provides one, which is the desired behavior.
 	re := regexp.MustCompile(MinFreeSpacePattern)
 	if !re.MatchString(strings.ToLower(c.Retention.MinFreeSpace)) {
 		return fmt.Errorf(
@@ -278,31 +289,7 @@ func (c *Config) validate() error {
 		)
 	}
 
-	// 
-	if c.Retention.MinFreeSpace == "" {
-		msg := fmt.Sprintf("%q value is not provided; setting to '%s', which is allowed minimum.", "min_free_space", LimitMinFreeSpace)
-		style.WarnLite(msg)
-		c.Retention.MinFreeSpace = LimitMinFreeSpace
-	}
-
 	// Future validation for schedule type, etc., can be added here.
-	// if app.bkpDest != "" {
-	// 	// Verify the provided destination
-	// 	if _, err := os.Stat(app.bkpDest); os.IsNotExist(err) {
-	// 		return "", fmt.Errorf("backup destination %s does not exist", app.bkpDest)
-	// 	}
-	// 	configPath := filepath.Join(app.bkpDest, configFileDefault)
-	// 	return configPath, nil
-	// }
-
-	//DELETE Moved to a dedicated validation function
-	// Set defaults
-	// if app.config.Retention.BackupsToKeep == 0 {
-	// 	app.config.Retention.BackupsToKeep = 1
-	// }
-	// if app.config.Retention.MinFreeSpace == "" {
-	// 	app.config.Retention.MinFreeSpace = "1gb"
-	// }
 	return nil
 }
 
