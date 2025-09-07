@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bufio"
+	// "bufio"
 	"flag"
 	"fmt"
-	"log"
+	// "log"
 	"os"
 	"regexp"
 	"path/filepath"
@@ -14,32 +14,32 @@ import (
 	"time"
 
 	"simple-backup/style"
-	"github.com/robfig/cron/v3"
+	// "github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
 )
 
-// Limits
+// Limits and Defaults
 const (
 	LimitMinFreeSpace string	= "10mb"
 	MinFreeSpacePattern	string	= `^\d+(mb|gb)$`
 	LimitMinBackupsToKeep int	= 1
+	BackupRootDirDefault		= "."
 )
 
 // Backup configuration
 type Config struct {
-	BkpRootDir string `yaml:"bkp_root_dir"`
-	Schedule   *struct {
-		Type      string `yaml:"type"`
-		DayOfWeek string `yaml:"day_of_the_week,omitempty"`
-		Interval  int    `yaml:"interval"`
-		Time      string `yaml:"time"`
+	bkpRootDir string `yaml:"bkp_root_dir"`
+	schedule   *struct {
+		frequency	string	`yaml:"frequency"`
+		dayOfMonth	int		`yaml:"day_of_the_month,omitempty"`
+		dayOfWeek	string	`yaml:"day_of_the_week,omitempty"`
+		time      	int		`yaml:"time_of_the_day"`
 	} `yaml:"schedule,omitempty"`
-	Retention struct {
-		BackupsToKeep 	int    `yaml:"backups_to_keep"`
-		MinFreeSpace  	string `yaml:"min_free_space"`
-		// MinFreeSpaceMb	int
+	retention struct {
+		backupsToKeep 	int    `yaml:"backups_to_keep"`
+		minFreeSpace  	string `yaml:"min_free_space"`
 	} `yaml:"retention"`
-	BkpItems []BackupItem `yaml:"bkp_items"`
+	bkpItems []BackupItem `yaml:"bkp_items"`
 }
 
 // Each entry under 'bkp_items'
@@ -60,12 +60,12 @@ type BackupResult struct {
 
 // Main application config
 type BackupApp struct {
-	bkpConfig          Config
 	configFile		string
+	bkpConfig       Config
 	bkpDest         string
 	exitOnError     bool
 	nonInteractive  bool
-	backupDir       string
+	runOnce			bool
 }
 
 // ENTRY POINT
@@ -99,7 +99,7 @@ func main() {
 	}
 
 	// Initiate main app
-	app, err := NewBackupApp(*bkpDest, *configFile, configFileDefault, *exitOnError, *nonInteractive)
+	app, err := NewBackupApp(*bkpDest, *configFile, configFileDefault, *exitOnError, *nonInteractive, *runOnce)
 	if err != nil {
 		style.Err("Failed to initialize application: %v", err)
 		os.Exit(1)
@@ -108,17 +108,18 @@ func main() {
 	}
 	//DELETE (debug) current end
 	style.Info("This is the end (currently)")
+	fmt.Print(app)
 	return
 	// Run once
-	if *runOnce || app.bkpConfig.Schedule == nil {
-		if err := app.runBackup(); err != nil {
-			log.Fatalf("Backup failed: %v", err)
-		}
-		return
-	}
+	// if *runOnce || app.bkpConfig.schedule == nil {
+	// 	if err := app.runBackup(); err != nil {
+	// 		log.Fatalf("Backup failed: %v", err)
+	// 	}
+	// 	return
+	// }
 
 	// Run scheduled backup
-	app.runScheduledBackup()
+	// app.runScheduledBackup()
 }
 
 // PRINT HELP
@@ -145,12 +146,13 @@ func printVersion(version string) {
 }
 
 // MAIN APP INIT
-func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, nonInteractive bool) (*BackupApp, error) {
+func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, nonInteractive, runOnce bool) (*BackupApp, error) {
 	app := &BackupApp{
 		bkpConfig:		*NewConfig(), // Set defaults first
 		bkpDest:        bkpDest,
 		exitOnError:    exitOnError,
 		nonInteractive: nonInteractive,
+		runOnce:  		runOnce,
 	}
 
 	// Case: Backup Destination explicitly specified by user
@@ -197,7 +199,7 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 		// Print found destinations
 		for _, drive := range drives {
 			style.Sub("  %s", drive)
-		}		
+		}
 
 		// Search for the first destination with default backup config file in it's root
 		style.Plain("Searching for %q file in the root of available drives and mount points... ", configFileDefault)
@@ -237,15 +239,15 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 // NewConfig creates a new Config struct with default values.
 func NewConfig() *Config {
 	return &Config{
-		BkpRootDir: ".",
-		Retention: struct {
-			BackupsToKeep int    `yaml:"backups_to_keep"`
-			MinFreeSpace  string `yaml:"min_free_space"`
+		bkpRootDir: BackupRootDirDefault,
+		retention: struct {
+			backupsToKeep int    `yaml:"backups_to_keep"`
+			minFreeSpace  string `yaml:"min_free_space"`
 		}{
-			BackupsToKeep: LimitMinBackupsToKeep,
-			MinFreeSpace:  LimitMinFreeSpace,
+			backupsToKeep: LimitMinBackupsToKeep,
+			minFreeSpace:  LimitMinFreeSpace,
 		},
-		BkpItems: []BackupItem{},
+		bkpItems: []BackupItem{},
 	}
 }
 
@@ -277,19 +279,19 @@ func (app *BackupApp) loadConfig(configFile string) error {
 // VALIDATE MAIN APP CONFIG
 func (c *Config) validate() error {
 	// Number of backups to keep
-	if c.Retention.BackupsToKeep < LimitMinBackupsToKeep {
-		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.", "backups_to_keep", c.Retention.BackupsToKeep, LimitMinBackupsToKeep)
+	if c.retention.backupsToKeep < LimitMinBackupsToKeep {
+		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.", "backups_to_keep", c.retention.backupsToKeep, LimitMinBackupsToKeep)
 		style.WarnLite(msg)
-		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
+		c.retention.backupsToKeep = LimitMinBackupsToKeep
 	}
 
 	// Validate MinFreeSpace format. This will fail on an empty string if the user explicitly provides one
 	re := regexp.MustCompile(MinFreeSpacePattern)
-	if !re.MatchString(strings.ToLower(c.Retention.MinFreeSpace)) {
+	if !re.MatchString(strings.ToLower(c.retention.minFreeSpace)) {
 		return fmt.Errorf(
 			"%q value %q has invalid format. Expected format is a number followed by 'mb' or 'gb' (e.g., '100mb', '10gb')",
 			"min_free_space",
-			c.Retention.MinFreeSpace,
+			c.retention.minFreeSpace,
 		)
 	}
 
@@ -355,312 +357,308 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 	return drives, nil
 }
 
-func (app *BackupApp) runScheduledBackup() {
-	c := cron.New()
+// func (app *BackupApp) runScheduledBackup() {
+// 	c := cron.New()
 
-	cronExpr := app.buildCronExpression()
-	fmt.Printf("Scheduling backup with cron expression: %s\n", cronExpr)
+// 	cronExpr := app.buildCronExpression()
+// 	fmt.Printf("Scheduling backup with cron expression: %s\n", cronExpr)
 
-	_, err := c.AddFunc(cronExpr, func() {
-		fmt.Printf("\n=== Scheduled backup started at %s ===\n", time.Now().Format("2006-01-02 15:04:05"))
-		if err := app.runBackup(); err != nil {
-			log.Printf("Scheduled backup failed: %v", err)
-		}
-	})
+// 	_, err := c.AddFunc(cronExpr, func() {
+// 		fmt.Printf("\n=== Scheduled backup started at %s ===\n", time.Now().Format("2006-01-02 15:04:05"))
+// 		if err := app.runBackup(); err != nil {
+// 			log.Printf("Scheduled backup failed: %v", err)
+// 		}
+// 	})
 
-	if err != nil {
-		log.Fatalf("Failed to schedule backup: %v", err)
-	}
+// 	if err != nil {
+// 		log.Fatalf("Failed to schedule backup: %v", err)
+// 	}
 
-	c.Start()
-	fmt.Println("Backup scheduler started. Press Ctrl+C to exit.")
+// 	c.Start()
+// 	fmt.Println("Backup scheduler started. Press Ctrl+C to exit.")
 
-	// Keep the program running
-	select {}
-}
+// 	// Keep the program running
+// 	select {}
+// }
 
-func (app *BackupApp) buildCronExpression() string {
-	schedule := app.bkpConfig.Schedule
-	timeParts := strings.Split(schedule.Time, ":")
-	hour := timeParts[0]
-	minute := timeParts[1]
+// func (app *BackupApp) buildCronExpression() string {
+// 	schedule := app.bkpConfig.schedule
+// 	timeParts := strings.Split(schedule.time, ":")
+// 	hour := timeParts[0]
+// 	minute := timeParts[1]
 
-	switch schedule.Type {
-	case "daily":
-		if schedule.Interval == 1 {
-			return fmt.Sprintf("%s %s * * *", minute, hour)
-		}
-		// For intervals > 1, we'll use a simple daily check (more complex logic would be needed for true interval support)
-		return fmt.Sprintf("%s %s */%d * *", minute, hour, schedule.Interval)
-	case "weekly":
-		dayMap := map[string]string{
-			"Sunday": "0", "Monday": "1", "Tuesday": "2", "Wednesday": "3",
-			"Thursday": "4", "Friday": "5", "Saturday": "6",
-		}
-		dayNum := dayMap[schedule.DayOfWeek]
-		return fmt.Sprintf("%s %s * * %s", minute, hour, dayNum)
-	default:
-		return fmt.Sprintf("%s %s * * *", minute, hour) // Default to daily
-	}
-}
+// 	switch schedule.frequency {
+// 	case "daily":
+// 		return fmt.Sprintf("%s %s * * *", minute, hour)
+// 	case "weekly":
+// 		dayMap := map[string]string{
+// 			"Sunday": "0", "Monday": "1", "Tuesday": "2", "Wednesday": "3",
+// 			"Thursday": "4", "Friday": "5", "Saturday": "6",
+// 		}
+// 		dayNum := dayMap[schedule.dayOfWeek]
+// 		return fmt.Sprintf("%s %s * * %s", minute, hour, dayNum)
+// 	default:
+// 		return fmt.Sprintf("%s %s * * *", minute, hour) // Default to daily
+// 	}
+// }
 
-func (app *BackupApp) runBackup() error {
-	startTime := time.Now()
+// func (app *BackupApp) runBackup() error {
+// 	startTime := time.Now()
 
-	// Create backup directory
-	timestamp := time.Now().Format("20060102-150405")
-	app.backupDir = filepath.Join(app.bkpDest, app.bkpConfig.BkpRootDir, fmt.Sprintf("psbkp-%s", timestamp))
+// 	// Create backup directory
+// 	timestamp := time.Now().Format("20060102-150405")
+// 	app.bkpConfig.bkpRootDir = filepath.Join(app.bkpDest, app.bkpConfig.bkpRootDir, fmt.Sprintf("psbkp-%s", timestamp))
 
-	fmt.Printf("\n=== Backup Configuration ===\n")
-	fmt.Printf("Backup destination: %s\n", app.bkpDest)
-	fmt.Printf("Backup directory: %s\n", app.backupDir)
-	fmt.Printf("Items to backup: %d\n", len(app.bkpConfig.BkpItems))
-	fmt.Printf("Exit on error: %t\n", app.exitOnError)
+// 	fmt.Printf("\n=== Backup Configuration ===\n")
+// 	fmt.Printf("Backup destination: %s\n", app.bkpDest)
+// 	fmt.Printf("Backup directory: %s\n", app.bkpConfig.bkpRootDir)
+// 	fmt.Printf("Items to backup: %d\n", len(app.bkpConfig.bkpItems))
+// 	fmt.Printf("Exit on error: %t\n", app.exitOnError)
 
-	if !app.nonInteractive {
-		fmt.Print("\nProceed with backup? (y/N): ")
-		reader := bufio.NewReader(os.Stdin)
-		response, _ := reader.ReadString('\n')
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
-			fmt.Println("Backup cancelled.")
-			return nil
-		}
-	}
+// 	if !app.nonInteractive {
+// 		fmt.Print("\nProceed with backup? (y/N): ")
+// 		reader := bufio.NewReader(os.Stdin)
+// 		response, _ := reader.ReadString('\n')
+// 		response = strings.TrimSpace(strings.ToLower(response))
+// 		if response != "y" && response != "yes" {
+// 			fmt.Println("Backup cancelled.")
+// 			return nil
+// 		}
+// 	}
 
-	// Create backup directory
-	if err := os.MkdirAll(app.backupDir, 0755); err != nil {
-		return fmt.Errorf("creating backup directory: %w", err)
-	}
+// 	// Create backup directory
+// 	if err := os.MkdirAll(app.bkpConfig.bkpRootDir, 0755); err != nil {
+// 		return fmt.Errorf("creating backup directory: %w", err)
+// 	}
 
-	fmt.Printf("\n=== Starting Backup ===\n")
+// 	fmt.Printf("\n=== Starting Backup ===\n")
 
-	var results []BackupResult
-	var failedCount int
+// 	var results []BackupResult
+// 	var failedCount int
 
-	for i, item := range app.bkpConfig.BkpItems {
-		fmt.Printf("\n[%d/%d] Backing up: %s\n", i+1, len(app.bkpConfig.BkpItems), item.Source)
+// 	for i, item := range app.bkpConfig.bkpItems {
+// 		fmt.Printf("\n[%d/%d] Backing up: %s\n", i+1, len(app.bkpConfig.bkpItems), item.Source)
 
-		itemStart := time.Now()
-		err := app.backupItem(item)
-		elapsed := time.Since(itemStart)
+// 		itemStart := time.Now()
+// 		err := app.backupItem(item)
+// 		elapsed := time.Since(itemStart)
 
-		result := BackupResult{
-			Item:    item,
-			Success: err == nil,
-			Error:   err,
-			Elapsed: elapsed,
-		}
-		results = append(results, result)
+// 		result := BackupResult{
+// 			Item:    item,
+// 			Success: err == nil,
+// 			Error:   err,
+// 			Elapsed: elapsed,
+// 		}
+// 		results = append(results, result)
 
-		if err != nil {
-			failedCount++
-			fmt.Printf("❌ FAILED (%v): %v\n", elapsed, err)
+// 		if err != nil {
+// 			failedCount++
+// 			fmt.Printf("❌ FAILED (%v): %v\n", elapsed, err)
 
-			if app.exitOnError {
-				if !app.nonInteractive {
-					fmt.Print("Exit due to error? (Y/n): ")
-					reader := bufio.NewReader(os.Stdin)
-					response, _ := reader.ReadString('\n')
-					response = strings.TrimSpace(strings.ToLower(response))
-					if response != "n" && response != "no" {
-						return fmt.Errorf("backup stopped due to error: %w", err)
-					}
-				} else {
-					return fmt.Errorf("backup stopped due to error: %w", err)
-				}
-			}
-		} else {
-			fmt.Printf("✅ SUCCESS (%v)\n", elapsed)
-		}
-	}
+// 			if app.exitOnError {
+// 				if !app.nonInteractive {
+// 					fmt.Print("Exit due to error? (Y/n): ")
+// 					reader := bufio.NewReader(os.Stdin)
+// 					response, _ := reader.ReadString('\n')
+// 					response = strings.TrimSpace(strings.ToLower(response))
+// 					if response != "n" && response != "no" {
+// 						return fmt.Errorf("backup stopped due to error: %w", err)
+// 					}
+// 				} else {
+// 					return fmt.Errorf("backup stopped due to error: %w", err)
+// 				}
+// 			}
+// 		} else {
+// 			fmt.Printf("✅ SUCCESS (%v)\n", elapsed)
+// 		}
+// 	}
 
-	totalElapsed := time.Since(startTime)
+// 	totalElapsed := time.Since(startTime)
 
-	// Print summary
-	fmt.Printf("\n=== Backup Summary ===\n")
-	fmt.Printf("Total time: %v\n", totalElapsed)
-	fmt.Printf("Total items: %d\n", len(results))
-	fmt.Printf("Successful: %d\n", len(results)-failedCount)
-	fmt.Printf("Failed: %d\n", failedCount)
+// 	// Print summary
+// 	fmt.Printf("\n=== Backup Summary ===\n")
+// 	fmt.Printf("Total time: %v\n", totalElapsed)
+// 	fmt.Printf("Total items: %d\n", len(results))
+// 	fmt.Printf("Successful: %d\n", len(results)-failedCount)
+// 	fmt.Printf("Failed: %d\n", failedCount)
 
-	fmt.Printf("\n=== Detailed Results ===\n")
-	for i, result := range results {
-		status := "✅"
-		if !result.Success {
-			status = "❌"
-		}
-		fmt.Printf("[%d] %s %s (%v)\n", i+1, status, result.Item.Source, result.Elapsed)
-		if result.Error != nil {
-			fmt.Printf("    Error: %v\n", result.Error)
-		}
-	}
+// 	fmt.Printf("\n=== Detailed Results ===\n")
+// 	for i, result := range results {
+// 		status := "✅"
+// 		if !result.Success {
+// 			status = "❌"
+// 		}
+// 		fmt.Printf("[%d] %s %s (%v)\n", i+1, status, result.Item.Source, result.Elapsed)
+// 		if result.Error != nil {
+// 			fmt.Printf("    Error: %v\n", result.Error)
+// 		}
+// 	}
 
-	// Cleanup old backups
-	if err := app.cleanupOldBackups(); err != nil {
-		fmt.Printf("Warning: Failed to cleanup old backups: %v\n", err)
-	}
+// 	// Cleanup old backups
+// 	if err := app.cleanupOldBackups(); err != nil {
+// 		fmt.Printf("Warning: Failed to cleanup old backups: %v\n", err)
+// 	}
 
-	if failedCount > 0 {
-		return fmt.Errorf("backup completed with %d failures", failedCount)
-	}
+// 	if failedCount > 0 {
+// 		return fmt.Errorf("backup completed with %d failures", failedCount)
+// 	}
 
-	fmt.Println("\n🎉 Backup completed successfully!")
-	return nil
-}
+// 	fmt.Println("\n🎉 Backup completed successfully!")
+// 	return nil
+// }
 
-func (app *BackupApp) backupItem(item BackupItem) error {
-	srcPath := item.Source
-	destPath := filepath.Join(app.backupDir, item.Destination)
+// func (app *BackupApp) backupItem(item BackupItem) error {
+// 	srcPath := item.Source
+// 	destPath := filepath.Join(app.bkpConfig.bkpRootDir, item.Destination)
 
-	// Ensure destination directory exists
-	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-		return fmt.Errorf("creating destination directory: %w", err)
-	}
+// 	// Ensure destination directory exists
+// 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+// 		return fmt.Errorf("creating destination directory: %w", err)
+// 	}
 
-	// Check if source is a file or directory
-	srcInfo, err := os.Stat(srcPath)
-	if err != nil {
-		return fmt.Errorf("accessing source path: %w", err)
-	}
+// 	// Check if source is a file or directory
+// 	srcInfo, err := os.Stat(srcPath)
+// 	if err != nil {
+// 		return fmt.Errorf("accessing source path: %w", err)
+// 	}
 
-	if srcInfo.IsDir() {
-		return app.copyDirectory(srcPath, destPath, item.Include, item.Exclude)
-	} else {
-		return app.copyFile(srcPath, destPath)
-	}
-}
+// 	if srcInfo.IsDir() {
+// 		return app.copyDirectory(srcPath, destPath, item.Include, item.Exclude)
+// 	} else {
+// 		return app.copyFile(srcPath, destPath)
+// 	}
+// }
 
-func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+// func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string) error {
+// 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+// 		if err != nil {
+// 			return err
+// 		}
 
-		// Calculate relative path
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
+// 		// Calculate relative path
+// 		relPath, err := filepath.Rel(src, path)
+// 		if err != nil {
+// 			return err
+// 		}
 
-		// Skip root directory
-		if relPath == "." {
-			return nil
-		}
+// 		// Skip root directory
+// 		if relPath == "." {
+// 			return nil
+// 		}
 
-		// Check include/exclude patterns
-		if !app.shouldInclude(relPath, include, exclude) {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
+// 		// Check include/exclude patterns
+// 		if !app.shouldInclude(relPath, include, exclude) {
+// 			if info.IsDir() {
+// 				return filepath.SkipDir
+// 			}
+// 			return nil
+// 		}
 
-		destPath := filepath.Join(dest, relPath)
+// 		destPath := filepath.Join(dest, relPath)
 
-		if info.IsDir() {
-			return os.MkdirAll(destPath, info.Mode())
-		} else {
-			return app.copyFile(path, destPath)
-		}
-	})
-}
+// 		if info.IsDir() {
+// 			return os.MkdirAll(destPath, info.Mode())
+// 		} else {
+// 			return app.copyFile(path, destPath)
+// 		}
+// 	})
+// }
 
-func (app *BackupApp) shouldInclude(path string, include, exclude []string) bool {
-	// If there are include patterns, check if path matches any
-	if len(include) > 0 {
-		included := false
-		for _, pattern := range include {
-			if matched, _ := filepath.Match(pattern, path); matched {
-				included = true
-				break
-			}
-			// Also check if it's a subdirectory of an included directory
-			if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
-				included = true
-				break
-			}
-		}
-		if !included {
-			return false
-		}
-	}
+// func (app *BackupApp) shouldInclude(path string, include, exclude []string) bool {
+// 	// If there are include patterns, check if path matches any
+// 	if len(include) > 0 {
+// 		included := false
+// 		for _, pattern := range include {
+// 			if matched, _ := filepath.Match(pattern, path); matched {
+// 				included = true
+// 				break
+// 			}
+// 			// Also check if it's a subdirectory of an included directory
+// 			if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
+// 				included = true
+// 				break
+// 			}
+// 		}
+// 		if !included {
+// 			return false
+// 		}
+// 	}
 
-	// Check exclude patterns (exclude takes priority)
-	for _, pattern := range exclude {
-		if matched, _ := filepath.Match(pattern, path); matched {
-			return false
-		}
-		// Also check if it's a subdirectory of an excluded directory
-		if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
-			return false
-		}
-	}
+// 	// Check exclude patterns (exclude takes priority)
+// 	for _, pattern := range exclude {
+// 		if matched, _ := filepath.Match(pattern, path); matched {
+// 			return false
+// 		}
+// 		// Also check if it's a subdirectory of an excluded directory
+// 		if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
+// 			return false
+// 		}
+// 	}
 
-	return true
-}
+// 	return true
+// }
 
-func (app *BackupApp) copyFile(src, dest string) error {
-	// Ensure destination directory exists
-	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-		return err
-	}
+// func (app *BackupApp) copyFile(src, dest string) error {
+// 	// Ensure destination directory exists
+// 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+// 		return err
+// 	}
 
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
+// 	srcFile, err := os.Open(src)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer srcFile.Close()
 
-	destFile, err := os.Create(dest)
-	if err != nil {
-		return err
-	}
-	defer destFile.Close()
+// 	destFile, err := os.Create(dest)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer destFile.Close()
 
-	_, err = destFile.ReadFrom(srcFile)
-	if err != nil {
-		return err
-	}
+// 	_, err = destFile.ReadFrom(srcFile)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	// Copy file permissions
-	srcInfo, err := srcFile.Stat()
-	if err != nil {
-		return err
-	}
+// 	// Copy file permissions
+// 	srcInfo, err := srcFile.Stat()
+// 	if err != nil {
+// 		return err
+// 	}
 
-	return os.Chmod(dest, srcInfo.Mode())
-}
+// 	return os.Chmod(dest, srcInfo.Mode())
+// }
 
-func (app *BackupApp) cleanupOldBackups() error {
-	backupRoot := filepath.Join(app.bkpDest, app.bkpConfig.BkpRootDir)
+// func (app *BackupApp) cleanupOldBackups() error {
+// 	backupRoot := filepath.Join(app.bkpDest, app.bkpConfig.bkpRootDir)
 
-	entries, err := os.ReadDir(backupRoot)
-	if err != nil {
-		return err
-	}
+// 	entries, err := os.ReadDir(backupRoot)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	var backupDirs []os.DirEntry
-	for _, entry := range entries {
-		if entry.IsDir() && strings.HasPrefix(entry.Name(), "psbkp-") {
-			backupDirs = append(backupDirs, entry)
-		}
-	}
+// 	var backupDirs []os.DirEntry
+// 	for _, entry := range entries {
+// 		if entry.IsDir() && strings.HasPrefix(entry.Name(), "psbkp-") {
+// 			backupDirs = append(backupDirs, entry)
+// 		}
+// 	}
 
-	if len(backupDirs) <= app.bkpConfig.Retention.BackupsToKeep {
-		return nil
-	}
+// 	if len(backupDirs) <= app.bkpConfig.retention.backupsToKeep {
+// 		return nil
+// 	}
 
-	// Sort by name (which includes timestamp) and remove oldest
-	// Note: This is a simplified approach. For production, you might want more sophisticated sorting
-	toDelete := len(backupDirs) - app.bkpConfig.Retention.BackupsToKeep
-	for i := 0; i < toDelete; i++ {
-		dirPath := filepath.Join(backupRoot, backupDirs[i].Name())
-		fmt.Printf("Removing old backup: %s\n", dirPath)
-		if err := os.RemoveAll(dirPath); err != nil {
-			return fmt.Errorf("removing old backup %s: %w", dirPath, err)
-		}
-	}
+// 	// Sort by name (which includes timestamp) and remove oldest
+// 	// Note: This is a simplified approach. For production, you might want more sophisticated sorting
+// 	toDelete := len(backupDirs) - app.bkpConfig.retention.backupsToKeep
+// 	for i := 0; i < toDelete; i++ {
+// 		dirPath := filepath.Join(backupRoot, backupDirs[i].Name())
+// 		fmt.Printf("Removing old backup: %s\n", dirPath)
+// 		if err := os.RemoveAll(dirPath); err != nil {
+// 			return fmt.Errorf("removing old backup %s: %w", dirPath, err)
+// 		}
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
