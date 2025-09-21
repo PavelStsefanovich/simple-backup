@@ -41,7 +41,7 @@ GOOS=linux GOARCH=amd64 go build -o smbkp-linux main.go
 ### Main Configuration File (config.yaml)
 
 ```yaml
-bkp_root_dir: PS.Backup
+bkp_dest_dir: PS.Backup
 
 # Comment out 'schedule' key to disable scheduled backups
 schedule:

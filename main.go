@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"path/filepath"
+	// "reflect" // debug
 	"runtime"
 	// "strconv"
 	"strings"
@@ -23,12 +24,12 @@ const (
 	LimitMinFreeSpace string	= "10mb"
 	MinFreeSpacePattern	string	= `^\d+(mb|gb)$`
 	LimitMinBackupsToKeep int	= 1
-	BackupRootDirDefault		= "."
+	BackupDestDirDefault		= "."
 )
 
 // Backup configuration
 type Config struct {
-	bkpRootDir string `yaml:"bkp_root_dir"`
+	bkpDestDir string `yaml:"bkp_dest_dir"`
 	schedule   *struct {
 		frequency	string	`yaml:"frequency"`
 		dayOfMonth	int		`yaml:"day_of_the_month,omitempty"`
@@ -68,6 +69,79 @@ type BackupApp struct {
 	runOnce			bool
 }
 
+// (debug)
+// getYAMLKeysRecursively inspects a Go type and returns a nested map
+// representing the YAML keys and subkeys, with empty placeholders for values.
+// func getYAMLKeysRecursively(t reflect.Type) (interface{}, error) {
+// 	// If the type is a pointer, get the element type.
+// 	if t.Kind() == reflect.Ptr {
+// 		t = t.Elem()
+// 	}
+
+// 	switch t.Kind() {
+// 	case reflect.Struct:
+// 		// Create a map to hold the keys for the current struct.
+// 		result := make(map[string]interface{})
+// 		for i := 0; i < t.NumField(); i++ {
+// 			field := t.Field(i)
+// 			// Get the YAML key from the struct tag, or use the field name.
+// 			tag := field.Tag.Get("yaml")
+// 			var keyName string
+// 			if tag != "" {
+// 				keyName = strings.Split(tag, ",")[0]
+// 			} else {
+// 				keyName = field.Name
+// 			}
+// 			if keyName == "-" { // Skip ignored fields.
+// 				continue
+// 			}
+
+// 			// Recursively call the function for nested fields.
+// 			subKeys, err := getYAMLKeysRecursively(field.Type)
+// 			if err != nil {
+// 				return nil, err
+// 			}
+// 			result[keyName] = subKeys
+// 		}
+// 		return result, nil
+
+// 	case reflect.Slice:
+// 		// For a slice, create a slice containing a single empty struct.
+// 		elemType := t.Elem()
+// 		elem, err := getYAMLKeysRecursively(elemType)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		return []interface{}{elem}, nil
+
+// 	case reflect.Map:
+// 		// For a map, create a map with a single placeholder key and an empty value.
+// 		keyType := t.Key()
+// 		valType := t.Elem()
+// 		mapKey, err := getYAMLKeysRecursively(keyType)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		mapVal, err := getYAMLKeysRecursively(valType)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		result := make(map[interface{}]interface{})
+// 		result[mapKey] = mapVal
+// 		return result, nil
+
+// 	// For primitive types (string, int, bool, etc.), return an empty string.
+// 	case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+// 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+// 		reflect.Bool, reflect.Float32, reflect.Float64:
+// 		return "", nil
+
+// 	default:
+// 		return "", fmt.Errorf("unsupported type: %s", t.Kind())
+// 	}
+// }
+
+
 // ENTRY POINT
 func main() {
 	// Command-line args
@@ -106,6 +180,28 @@ func main() {
 		// log.Fatalf("Failed to initialize application: %v", err)
 		// return
 	}
+
+
+	// (debug)
+	// appType := reflect.TypeOf(BackupApp{})
+
+	// // Recursively get the keys and structure from the App type.
+	// keyStructure, err := getYAMLKeysRecursively(appType)
+	// if err != nil {
+	// 	fmt.Printf("Error generating YAML keys: %v\n", err)
+	// 	return
+	// }
+
+	// // Marshal the generated structure into a YAML byte slice.
+	// yamlData, err := yaml.Marshal(keyStructure)
+	// if err != nil {
+	// 	fmt.Printf("Error marshaling to YAML: %v\n", err)
+	// 	return
+	// }
+
+	// // Print the final YAML output.
+	// fmt.Println(string(yamlData))
+
 	//DELETE (debug) current end
 	style.Info("This is the end (currently)")
 	fmt.Print(app)
@@ -239,7 +335,7 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 // NewConfig creates a new Config struct with default values.
 func NewConfig() *Config {
 	return &Config{
-		bkpRootDir: BackupRootDirDefault,
+		bkpDestDir: BackupDestDirDefault,
 		retention: struct {
 			backupsToKeep int    `yaml:"backups_to_keep"`
 			minFreeSpace  string `yaml:"min_free_space"`
@@ -350,8 +446,6 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 				}
 			}
 		}
-		// Also check root
-		drives = append(drives, "/")
 	}
 
 	return drives, nil
@@ -407,11 +501,11 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 
 // 	// Create backup directory
 // 	timestamp := time.Now().Format("20060102-150405")
-// 	app.bkpConfig.bkpRootDir = filepath.Join(app.bkpDest, app.bkpConfig.bkpRootDir, fmt.Sprintf("psbkp-%s", timestamp))
+// 	app.bkpConfig.bkpDestDir = filepath.Join(app.bkpDest, app.bkpConfig.bkpDestDir, fmt.Sprintf("psbkp-%s", timestamp))
 
 // 	fmt.Printf("\n=== Backup Configuration ===\n")
 // 	fmt.Printf("Backup destination: %s\n", app.bkpDest)
-// 	fmt.Printf("Backup directory: %s\n", app.bkpConfig.bkpRootDir)
+// 	fmt.Printf("Backup directory: %s\n", app.bkpConfig.bkpDestDir)
 // 	fmt.Printf("Items to backup: %d\n", len(app.bkpConfig.bkpItems))
 // 	fmt.Printf("Exit on error: %t\n", app.exitOnError)
 
@@ -427,7 +521,7 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 // 	}
 
 // 	// Create backup directory
-// 	if err := os.MkdirAll(app.bkpConfig.bkpRootDir, 0755); err != nil {
+// 	if err := os.MkdirAll(app.bkpConfig.bkpDestDir, 0755); err != nil {
 // 		return fmt.Errorf("creating backup directory: %w", err)
 // 	}
 
@@ -509,7 +603,7 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 
 // func (app *BackupApp) backupItem(item BackupItem) error {
 // 	srcPath := item.Source
-// 	destPath := filepath.Join(app.bkpConfig.bkpRootDir, item.Destination)
+// 	destPath := filepath.Join(app.bkpConfig.bkpDestDir, item.Destination)
 
 // 	// Ensure destination directory exists
 // 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
@@ -631,7 +725,7 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 // }
 
 // func (app *BackupApp) cleanupOldBackups() error {
-// 	backupRoot := filepath.Join(app.bkpDest, app.bkpConfig.bkpRootDir)
+// 	backupRoot := filepath.Join(app.bkpDest, app.bkpConfig.bkpDestDir)
 
 // 	entries, err := os.ReadDir(backupRoot)
 // 	if err != nil {
