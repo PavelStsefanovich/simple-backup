@@ -29,18 +29,18 @@ const (
 
 // Backup configuration
 type Config struct {
-	bkpDestDir string `yaml:"bkp_dest_dir"`
-	schedule   *struct {
-		frequency	string	`yaml:"frequency"`
-		dayOfMonth	int		`yaml:"day_of_the_month,omitempty"`
-		dayOfWeek	string	`yaml:"day_of_the_week,omitempty"`
-		time      	int		`yaml:"time_of_the_day"`
+	BkpDestDir string `yaml:"bkp_dest_dir"`
+	Schedule   *struct {
+		Frequency	string	`yaml:"frequency"`
+		DayOfMonth	int		`yaml:"day_of_the_month,omitempty"`
+		DyOfWeek	string	`yaml:"day_of_the_week,omitempty"`
+		Time      	int		`yaml:"time_of_the_day"`
 	} `yaml:"schedule,omitempty"`
-	retention struct {
-		backupsToKeep 	int    `yaml:"backups_to_keep"`
-		minFreeSpace  	string `yaml:"min_free_space"`
+	Retention struct {
+		BackupsToKeep 	int    `yaml:"backups_to_keep"`
+		MinFreeSpace  	string `yaml:"min_free_space"`
 	} `yaml:"retention"`
-	bkpItems []BackupItem `yaml:"bkp_items"`
+	BkpItems []BackupItem `yaml:"bkp_items"`
 }
 
 // Each entry under 'bkp_items'
@@ -62,7 +62,7 @@ type BackupResult struct {
 // Main application config
 type BackupApp struct {
 	configFile		string
-	bkpConfig       Config
+	BkpConfig       Config
 	bkpDest         string
 	exitOnError     bool
 	nonInteractive  bool
@@ -181,7 +181,6 @@ func main() {
 		// return
 	}
 
-
 	// (debug)
 	// appType := reflect.TypeOf(BackupApp{})
 
@@ -202,12 +201,13 @@ func main() {
 	// // Print the final YAML output.
 	// fmt.Println(string(yamlData))
 
-	//DELETE (debug) current end
+	// DELETE (debug) current end
 	style.Info("This is the end (currently)")
 	fmt.Print(app)
 	return
+
 	// Run once
-	// if *runOnce || app.bkpConfig.schedule == nil {
+	// if *runOnce || app.BkpConfig.Schedule == nil {
 	// 	if err := app.runBackup(); err != nil {
 	// 		log.Fatalf("Backup failed: %v", err)
 	// 	}
@@ -244,7 +244,7 @@ func printVersion(version string) {
 // MAIN APP INIT
 func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, nonInteractive, runOnce bool) (*BackupApp, error) {
 	app := &BackupApp{
-		bkpConfig:		*NewConfig(), // Set defaults first
+		BkpConfig:		*NewConfig(), // Set defaults first
 		bkpDest:        bkpDest,
 		exitOnError:    exitOnError,
 		nonInteractive: nonInteractive,
@@ -335,15 +335,15 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 // NewConfig creates a new Config struct with default values.
 func NewConfig() *Config {
 	return &Config{
-		bkpDestDir: BackupDestDirDefault,
-		retention: struct {
-			backupsToKeep int    `yaml:"backups_to_keep"`
-			minFreeSpace  string `yaml:"min_free_space"`
+		BkpDestDir: BackupDestDirDefault,
+		Retention: struct {
+			BackupsToKeep int    `yaml:"backups_to_keep"`
+			MinFreeSpace  string `yaml:"min_free_space"`
 		}{
-			backupsToKeep: LimitMinBackupsToKeep,
-			minFreeSpace:  LimitMinFreeSpace,
+			BackupsToKeep: LimitMinBackupsToKeep,
+			MinFreeSpace:  LimitMinFreeSpace,
 		},
-		bkpItems: []BackupItem{},
+		BkpItems: []BackupItem{},
 	}
 }
 
@@ -359,11 +359,11 @@ func (app *BackupApp) loadConfig(configFile string) error {
 	}
 	style.Ok("")
 
-	if err := yaml.Unmarshal(data, &app.bkpConfig); err != nil {
+	if err := yaml.Unmarshal(data, &app.BkpConfig); err != nil {
 		return fmt.Errorf("parsing config file: %w", err)
 	}
 
-	if err := app.bkpConfig.validate(); err != nil {
+	if err := app.BkpConfig.validate(); err != nil {
 		style.PlainLn("")
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
@@ -375,19 +375,19 @@ func (app *BackupApp) loadConfig(configFile string) error {
 // VALIDATE MAIN APP CONFIG
 func (c *Config) validate() error {
 	// Number of backups to keep
-	if c.retention.backupsToKeep < LimitMinBackupsToKeep {
-		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.", "backups_to_keep", c.retention.backupsToKeep, LimitMinBackupsToKeep)
+	if c.Retention.BackupsToKeep < LimitMinBackupsToKeep {
+		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.", "backups_to_keep", c.Retention.BackupsToKeep, LimitMinBackupsToKeep)
 		style.WarnLite(msg)
-		c.retention.backupsToKeep = LimitMinBackupsToKeep
+		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
 	}
 
 	// Validate MinFreeSpace format. This will fail on an empty string if the user explicitly provides one
 	re := regexp.MustCompile(MinFreeSpacePattern)
-	if !re.MatchString(strings.ToLower(c.retention.minFreeSpace)) {
+	if !re.MatchString(strings.ToLower(c.Retention.MinFreeSpace)) {
 		return fmt.Errorf(
 			"%q value %q has invalid format. Expected format is a number followed by 'mb' or 'gb' (e.g., '100mb', '10gb')",
 			"min_free_space",
-			c.retention.minFreeSpace,
+			c.Retention.MinFreeSpace,
 		)
 	}
 
@@ -476,7 +476,7 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 // }
 
 // func (app *BackupApp) buildCronExpression() string {
-// 	schedule := app.bkpConfig.schedule
+// 	schedule := app.BkpConfig.Schedule
 // 	timeParts := strings.Split(schedule.time, ":")
 // 	hour := timeParts[0]
 // 	minute := timeParts[1]
@@ -501,12 +501,12 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 
 // 	// Create backup directory
 // 	timestamp := time.Now().Format("20060102-150405")
-// 	app.bkpConfig.bkpDestDir = filepath.Join(app.bkpDest, app.bkpConfig.bkpDestDir, fmt.Sprintf("psbkp-%s", timestamp))
+// 	app.BkpConfig.bkpDestDir = filepath.Join(app.bkpDest, app.BkpConfig.bkpDestDir, fmt.Sprintf("psbkp-%s", timestamp))
 
 // 	fmt.Printf("\n=== Backup Configuration ===\n")
 // 	fmt.Printf("Backup destination: %s\n", app.bkpDest)
-// 	fmt.Printf("Backup directory: %s\n", app.bkpConfig.bkpDestDir)
-// 	fmt.Printf("Items to backup: %d\n", len(app.bkpConfig.bkpItems))
+// 	fmt.Printf("Backup directory: %s\n", app.BkpConfig.bkpDestDir)
+// 	fmt.Printf("Items to backup: %d\n", len(app.BkpConfig.BkpItems))
 // 	fmt.Printf("Exit on error: %t\n", app.exitOnError)
 
 // 	if !app.nonInteractive {
@@ -521,7 +521,7 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 // 	}
 
 // 	// Create backup directory
-// 	if err := os.MkdirAll(app.bkpConfig.bkpDestDir, 0755); err != nil {
+// 	if err := os.MkdirAll(app.BkpConfig.bkpDestDir, 0755); err != nil {
 // 		return fmt.Errorf("creating backup directory: %w", err)
 // 	}
 
@@ -530,8 +530,8 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 // 	var results []BackupResult
 // 	var failedCount int
 
-// 	for i, item := range app.bkpConfig.bkpItems {
-// 		fmt.Printf("\n[%d/%d] Backing up: %s\n", i+1, len(app.bkpConfig.bkpItems), item.Source)
+// 	for i, item := range app.BkpConfig.BkpItems {
+// 		fmt.Printf("\n[%d/%d] Backing up: %s\n", i+1, len(app.BkpConfig.BkpItems), item.Source)
 
 // 		itemStart := time.Now()
 // 		err := app.backupItem(item)
@@ -603,7 +603,7 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 
 // func (app *BackupApp) backupItem(item BackupItem) error {
 // 	srcPath := item.Source
-// 	destPath := filepath.Join(app.bkpConfig.bkpDestDir, item.Destination)
+// 	destPath := filepath.Join(app.BkpConfig.bkpDestDir, item.Destination)
 
 // 	// Ensure destination directory exists
 // 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
@@ -725,7 +725,7 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 // }
 
 // func (app *BackupApp) cleanupOldBackups() error {
-// 	backupRoot := filepath.Join(app.bkpDest, app.bkpConfig.bkpDestDir)
+// 	backupRoot := filepath.Join(app.bkpDest, app.BkpConfig.bkpDestDir)
 
 // 	entries, err := os.ReadDir(backupRoot)
 // 	if err != nil {
@@ -739,13 +739,13 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 // 		}
 // 	}
 
-// 	if len(backupDirs) <= app.bkpConfig.retention.backupsToKeep {
+// 	if len(backupDirs) <= app.BkpConfig.Retention.BackupsToKeep {
 // 		return nil
 // 	}
 
 // 	// Sort by name (which includes timestamp) and remove oldest
 // 	// Note: This is a simplified approach. For production, you might want more sophisticated sorting
-// 	toDelete := len(backupDirs) - app.bkpConfig.retention.backupsToKeep
+// 	toDelete := len(backupDirs) - app.BkpConfig.Retention.BackupsToKeep
 // 	for i := 0; i < toDelete; i++ {
 // 		dirPath := filepath.Join(backupRoot, backupDirs[i].Name())
 // 		fmt.Printf("Removing old backup: %s\n", dirPath)
