@@ -6,6 +6,7 @@ import (
 	"fmt"
 	// "log"
 	"os"
+	"math/rand"
 	"regexp"
 	"path/filepath"
 	// "reflect" // debug
@@ -32,7 +33,7 @@ const (
 
 // Backup configuration
 type Config struct {
-	BkpDestDir string `yaml:"bkp_dest_dir"`
+	BkpDestDir 		string `yaml:"bkp_dest_dir"`
 	Schedule   *struct {
 		Frequency	string	`yaml:"frequency"`
 		DayOfMonth	int		`yaml:"day_of_the_month,omitempty"`
@@ -42,7 +43,7 @@ type Config struct {
 	Retention struct {
 		BackupsToKeep 		int    `yaml:"backups_to_keep"`
 		MinFreeSpace  		string `yaml:"min_free_space"`
-		minFreeSpaceParsed	int64
+		minFreeSpaceParsed	int64	// set implicitly by parsing MinFreeSpace
 	} `yaml:"retention"`
 	BkpItems []BackupItem `yaml:"bkp_items"`
 }
@@ -71,6 +72,7 @@ type BackupApp struct {
 	configFile		string
 	BkpConfig       Config
 	bkpDest         string
+	bkpDestFullPath	string
 	exitOnError     bool
 	nonInteractive  bool
 	runOnce			bool
@@ -340,9 +342,9 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 		}
 	}
 
-	// Creating full backup destination path (bkpDest/bkp_dest_dir)
-	
-
+	// Creating full backup destination path (bkpDest/bkp_dest_dir/<unique_dir>)
+	fullPath, _ := generateUniquePath(app.bkpDest, app.BkpConfig.BkpDestDir)
+	app.bkpDestFullPath = fullPath
 
 	return app, nil
 }
@@ -485,6 +487,28 @@ func getAvailableDrives() ([]string, error) {
 	}
 
 	return drives, nil
+}
+
+
+// CREATE UNIQUE DIRECTORY FOR THE BACKUP RUN
+func generateUniquePath(baseDir, subDir string) (string, error) {
+	// Join parent directories
+	parentDirPath := filepath.Join(baseDir, subDir)
+
+	// Generate a unique directory name
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	b := make([]byte, 10)
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	uniqueName := fmt.Sprintf("smbkp-%s", string(b))
+
+	// Combine parent directories with unique directory into full path
+	fullPath := filepath.Join(parentDirPath, uniqueName)
+
+	return fullPath, nil
 }
 
 
