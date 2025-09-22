@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	// "reflect" // debug
 	"runtime"
-	// "strconv"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,13 +19,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+
 // Limits and Defaults
 const (
-	LimitMinFreeSpace string	= "10mb"
-	MinFreeSpacePattern	string	= `^\d+(mb|gb)$`
-	LimitMinBackupsToKeep int	= 1
-	BackupDestDirDefault		= "."
+	LimitMinFreeSpace string		= "10mb"
+	LimitMinFreeSpaceParsed int64	= 10485760
+	MinFreeSpacePattern	string		= `^\d+(mb|gb)$`
+	LimitMinBackupsToKeep int		= 1
+	BackupDestDirDefault			= "smbkp"
 )
+
 
 // Backup configuration
 type Config struct {
@@ -37,11 +40,13 @@ type Config struct {
 		Time      	int		`yaml:"time_of_the_day"`
 	} `yaml:"schedule,omitempty"`
 	Retention struct {
-		BackupsToKeep 	int    `yaml:"backups_to_keep"`
-		MinFreeSpace  	string `yaml:"min_free_space"`
+		BackupsToKeep 		int    `yaml:"backups_to_keep"`
+		MinFreeSpace  		string `yaml:"min_free_space"`
+		minFreeSpaceParsed	int64
 	} `yaml:"retention"`
 	BkpItems []BackupItem `yaml:"bkp_items"`
 }
+
 
 // Each entry under 'bkp_items'
 type BackupItem struct {
@@ -51,6 +56,7 @@ type BackupItem struct {
 	Exclude     []string `yaml:"exclude,omitempty"`
 }
 
+
 // Backup outcome tracking object
 type BackupResult struct {
 	Item    BackupItem
@@ -58,6 +64,7 @@ type BackupResult struct {
 	Error   error
 	Elapsed time.Duration
 }
+
 
 // Main application config
 type BackupApp struct {
@@ -68,6 +75,7 @@ type BackupApp struct {
 	nonInteractive  bool
 	runOnce			bool
 }
+
 
 // (debug)
 // getYAMLKeysRecursively inspects a Go type and returns a nested map
@@ -218,6 +226,7 @@ func main() {
 	// app.runScheduledBackup()
 }
 
+
 // PRINT HELP
 func printHelp(configFileDefault string) {
 	fmt.Println()
@@ -234,12 +243,14 @@ func printHelp(configFileDefault string) {
 	fmt.Println()
 }
 
+
 // PRINT VERSION
 func printVersion(version string) {
 	style.Signature("Simple Backup")
 	style.Plain(version)
 	fmt.Println()
 }
+
 
 // MAIN APP INIT
 func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, nonInteractive, runOnce bool) (*BackupApp, error) {
@@ -285,7 +296,7 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 		// Get available drives and mount points
 		style.InfoLite("%q is not specified.", "-bkp-dest")
 		style.Plain("Retrieving available drives and common mount points... ")
-		drives, err := app.getAvailableDrives()
+		drives, err := getAvailableDrives()
 		if err != nil {
 			style.PlainLn("")
 			return nil, fmt.Errorf("getting available drives: %w", err)
@@ -329,23 +340,31 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 		}
 	}
 
+	// Creating full backup destination path (bkpDest/bkp_dest_dir)
+	
+
+
 	return app, nil
 }
 
-// NewConfig creates a new Config struct with default values.
+
+// INITIATE CONFIG STRUCT WITH DEFAULT VALUES
 func NewConfig() *Config {
 	return &Config{
 		BkpDestDir: BackupDestDirDefault,
 		Retention: struct {
 			BackupsToKeep int    `yaml:"backups_to_keep"`
 			MinFreeSpace  string `yaml:"min_free_space"`
+			minFreeSpaceParsed int64
 		}{
-			BackupsToKeep: LimitMinBackupsToKeep,
-			MinFreeSpace:  LimitMinFreeSpace,
+			BackupsToKeep: 		LimitMinBackupsToKeep,
+			MinFreeSpace:  		LimitMinFreeSpace,
+			minFreeSpaceParsed: LimitMinFreeSpaceParsed,
 		},
 		BkpItems: []BackupItem{},
 	}
 }
+
 
 // LOAD MAIN CONFIG
 func (app *BackupApp) loadConfig(configFile string) error {
@@ -372,16 +391,17 @@ func (app *BackupApp) loadConfig(configFile string) error {
 	return nil
 }
 
+
 // VALIDATE MAIN APP CONFIG
 func (c *Config) validate() error {
-	// Number of backups to keep
+	// Validate backups_to_keep
 	if c.Retention.BackupsToKeep < LimitMinBackupsToKeep {
 		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.", "backups_to_keep", c.Retention.BackupsToKeep, LimitMinBackupsToKeep)
 		style.WarnLite(msg)
 		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
 	}
 
-	// Validate MinFreeSpace format. This will fail on an empty string if the user explicitly provides one
+	// Validate min_free_space format. This will fail if the user explicitly specifies it with an empty string value.
 	re := regexp.MustCompile(MinFreeSpacePattern)
 	if !re.MatchString(strings.ToLower(c.Retention.MinFreeSpace)) {
 		return fmt.Errorf(
@@ -391,38 +411,54 @@ func (c *Config) validate() error {
 		)
 	}
 
+	// Valiedate min_free_space value
+	minFreeSpaceParsed, err := parseDiskSize(c.Retention.MinFreeSpace)
+	if err != nil {
+		return err
+	}
+
+	if minFreeSpaceParsed < LimitMinFreeSpaceParsed {
+		msg := fmt.Sprintf("%q value increased from '%s' to '%s', which is allowed minimum.", "min_free_space", c.Retention.MinFreeSpace, LimitMinFreeSpace)
+		style.WarnLite(msg)
+		c.Retention.MinFreeSpace = LimitMinFreeSpace		
+		c.Retention.minFreeSpaceParsed = LimitMinFreeSpaceParsed
+	}
+	c.Retention.minFreeSpaceParsed = minFreeSpaceParsed
+
 	// Future validation for schedule type, etc., can be added here.
 	return nil
 }
 
+
 // PARSE DISK SIZE STRING
-// func parseDiskSize(sizeStr string) (int64, error) {
-// 	sizeStr = strings.ToLower(strings.TrimSpace(sizeStr))
+func parseDiskSize(sizeStr string) (int64, error) {
+	sizeStr = strings.ToLower(strings.TrimSpace(sizeStr))
 
-// 	var multiplier int64
-// 	var valueStr string
+	var multiplier int64
+	var valueStr string
 
-// 	switch {
-// 	case strings.HasSuffix(sizeStr, "mb"):
-// 		multiplier = 1024 * 1024
-// 		valueStr = strings.TrimSuffix(sizeStr, "mb")
-// 	case strings.HasSuffix(sizeStr, "gb"):
-// 		multiplier = 1024 * 1024 * 1024
-// 		valueStr = strings.TrimSuffix(sizeStr, "gb")
-// 	default:
-// 		return 0, errors.New("invalid format: must end with 'mb' or 'gb'")
-// 	}
+	switch {
+	case strings.HasSuffix(sizeStr, "mb"):
+		multiplier = 1024 * 1024
+		valueStr = strings.TrimSuffix(sizeStr, "mb")
+	case strings.HasSuffix(sizeStr, "gb"):
+		multiplier = 1024 * 1024 * 1024
+		valueStr = strings.TrimSuffix(sizeStr, "gb")
+	default:
+		return 0, fmt.Errorf("invalid format: must end with 'mb' or 'gb'")
+	}
 
-// 	num, err := strconv.ParseInt(strings.TrimSpace(valueStr), 10, 64)
-// 	if err != nil {
-// 		return 0, fmt.Errorf("invalid number value: %w", err)
-// 	}
+	num, err := strconv.ParseInt(strings.TrimSpace(valueStr), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number value: %w", err)
+	}
 
-// 	return num * multiplier, nil
-// }
+	return num * multiplier, nil
+}
+
 
 // PROVIDE OS-SPECIFIC COMMON DRIVES OR MOUNT POINTS
-func (app *BackupApp) getAvailableDrives() ([]string, error) {
+func getAvailableDrives() ([]string, error) {
 	var drives []string
 
 	switch runtime.GOOS {
@@ -450,6 +486,7 @@ func (app *BackupApp) getAvailableDrives() ([]string, error) {
 
 	return drives, nil
 }
+
 
 // func (app *BackupApp) runScheduledBackup() {
 // 	c := cron.New()
