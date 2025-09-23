@@ -9,7 +9,6 @@ import (
 	"math/rand"
 	"regexp"
 	"path/filepath"
-	// "reflect" // debug
 	"runtime"
 	"strconv"
 	"strings"
@@ -18,6 +17,10 @@ import (
 	"simple-backup/style"
 	// "github.com/robfig/cron/v3"
 	"gopkg.in/yaml.v3"
+
+	// debug
+	// "reflect"
+	// "simple-backup/helpers"
 )
 
 
@@ -79,90 +82,18 @@ type BackupApp struct {
 }
 
 
-// (debug)
-// getYAMLKeysRecursively inspects a Go type and returns a nested map
-// representing the YAML keys and subkeys, with empty placeholders for values.
-// func getYAMLKeysRecursively(t reflect.Type) (interface{}, error) {
-// 	// If the type is a pointer, get the element type.
-// 	if t.Kind() == reflect.Ptr {
-// 		t = t.Elem()
-// 	}
-
-// 	switch t.Kind() {
-// 	case reflect.Struct:
-// 		// Create a map to hold the keys for the current struct.
-// 		result := make(map[string]interface{})
-// 		for i := 0; i < t.NumField(); i++ {
-// 			field := t.Field(i)
-// 			// Get the YAML key from the struct tag, or use the field name.
-// 			tag := field.Tag.Get("yaml")
-// 			var keyName string
-// 			if tag != "" {
-// 				keyName = strings.Split(tag, ",")[0]
-// 			} else {
-// 				keyName = field.Name
-// 			}
-// 			if keyName == "-" { // Skip ignored fields.
-// 				continue
-// 			}
-
-// 			// Recursively call the function for nested fields.
-// 			subKeys, err := getYAMLKeysRecursively(field.Type)
-// 			if err != nil {
-// 				return nil, err
-// 			}
-// 			result[keyName] = subKeys
-// 		}
-// 		return result, nil
-
-// 	case reflect.Slice:
-// 		// For a slice, create a slice containing a single empty struct.
-// 		elemType := t.Elem()
-// 		elem, err := getYAMLKeysRecursively(elemType)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		return []interface{}{elem}, nil
-
-// 	case reflect.Map:
-// 		// For a map, create a map with a single placeholder key and an empty value.
-// 		keyType := t.Key()
-// 		valType := t.Elem()
-// 		mapKey, err := getYAMLKeysRecursively(keyType)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		mapVal, err := getYAMLKeysRecursively(valType)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		result := make(map[interface{}]interface{})
-// 		result[mapKey] = mapVal
-// 		return result, nil
-
-// 	// For primitive types (string, int, bool, etc.), return an empty string.
-// 	case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-// 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-// 		reflect.Bool, reflect.Float32, reflect.Float64:
-// 		return "", nil
-
-// 	default:
-// 		return "", fmt.Errorf("unsupported type: %s", t.Kind())
-// 	}
-// }
-
 
 // ENTRY POINT
 func main() {
 	// Command-line args
 	var (
-		configFile        = flag.String("config", "", "Path to configuration file")
-		bkpDest           = flag.String("bkp-dest", "", "Backup destination drive or mount. Required if -config is specified.")
-		exitOnError       = flag.Bool("exit-on-error", false, "Exit immediately on any copy operation failure")
-		nonInteractive    = flag.Bool("non-interactive", false, "Skip all user prompts")
-		runOnce           = flag.Bool("run-once", true, "Run backup once and exit (ignores schedule)")
-		showHelp          = flag.Bool("help", false, "Show help")
-		showVersion       = flag.Bool("version", false, "Show version info")
+		configFile      = flag.String("config", "", "Path to configuration file.")
+		bkpDest         = flag.String("bkp-dest", "", "Backup destination drive or mount. Required if -config is specified.")
+		exitOnError     = flag.Bool("exit-on-error", false, "Exit immediately on any copy operation failure.")
+		nonInteractive  = flag.Bool("non-interactive", false, "Skip all user prompts.")
+		runOnce         = flag.Bool("run-once", true, "Run backup once and exit (ignores schedule).")
+		showHelp        = flag.Bool("help", false, "Show help.")
+		showVersion     = flag.Bool("version", false, "Show version info.")
 	)
 	flag.Parse()
 
@@ -182,6 +113,9 @@ func main() {
 		return
 	}
 
+	// (debug) Show Backup struct 
+	// helpers.PrintYAMLKeysForType(reflect.TypeOf(BackupApp{}))
+
 	// Initiate main app
 	app, err := NewBackupApp(*bkpDest, *configFile, configFileDefault, *exitOnError, *nonInteractive, *runOnce)
 	if err != nil {
@@ -191,25 +125,9 @@ func main() {
 		// return
 	}
 
-	// (debug)
-	// appType := reflect.TypeOf(BackupApp{})
 
-	// // Recursively get the keys and structure from the App type.
-	// keyStructure, err := getYAMLKeysRecursively(appType)
-	// if err != nil {
-	// 	fmt.Printf("Error generating YAML keys: %v\n", err)
-	// 	return
-	// }
+	//TODO Validate against the empty bkp_items[] list
 
-	// // Marshal the generated structure into a YAML byte slice.
-	// yamlData, err := yaml.Marshal(keyStructure)
-	// if err != nil {
-	// 	fmt.Printf("Error marshaling to YAML: %v\n", err)
-	// 	return
-	// }
-
-	// // Print the final YAML output.
-	// fmt.Println(string(yamlData))
 
 	// DELETE (debug) current end
 	style.Info("This is the end (currently)")
