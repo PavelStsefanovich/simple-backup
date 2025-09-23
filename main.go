@@ -35,7 +35,9 @@ const (
 )
 
 
-// Backup configuration
+//////////////  STRUCTS  //////////////////////////////////////////////////////
+
+// Backup config object
 type Config struct {
 	BkpDestDir 		string `yaml:"bkp_dest_dir"`
 	Schedule   *struct {
@@ -53,7 +55,7 @@ type Config struct {
 }
 
 
-// Each entry under 'bkp_items'
+// Object for each entry under 'bkp_items'
 type BackupItem struct {
 	Source      string   `yaml:"source"`
 	Destination string   `yaml:"destination"`
@@ -71,7 +73,7 @@ type BackupResult struct {
 }
 
 
-// Main application config
+// Main application object
 type BackupApp struct {
 	configFile		string
 	BkpConfig       Config
@@ -84,9 +86,12 @@ type BackupApp struct {
 }
 
 
+//////////////  INIT FUNCTIONS  ///////////////////////////////////////////////
 
 // ENTRY POINT
 func main() {
+	fmt.Println()
+
 	// Command-line args
 	var (
 		configFile      = flag.String("config", "", "Path to configuration file.")
@@ -123,13 +128,15 @@ func main() {
 		// return
 	}
 
+	// Review backup configuration before proceeding
+	reviewBackupConfig(app)
 
 	//TODO Validate against the empty bkp_items[] list
 
 
 	// DELETE (debug) current end
 	style.Info("This is the end (currently)")
-	fmt.Print(app)
+	fmt.Println(app)
 	return
 
 	// Run once
@@ -266,7 +273,7 @@ func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive, runOn
 }
 
 
-// INITIATE CONFIG STRUCT WITH DEFAULT VALUES
+// INIT CONFIG STRUCT WITH DEFAULT VALUES
 func NewConfig() *Config {
 	return &Config{
 		BkpDestDir: BackupDestDirDefault,
@@ -284,9 +291,10 @@ func NewConfig() *Config {
 }
 
 
-// LOAD MAIN CONFIG
+// LOAD MAIN CONFIG FROM FILE
 func (app *BackupApp) loadConfig(configFile string) error {
 	data, err := os.ReadFile(configFile)
+
 	if err != nil {
 		style.PlainLn("")
 		if perr, ok := err.(*os.PathError); ok { // this wrapper code allows to parse the error and enquote file path
@@ -427,6 +435,57 @@ func generateUniquePath(baseDir, subDir string) (string, error) {
 	return fullPath, nil
 }
 
+
+// REVIEW BACKUP CONFIGURATION BEFORE PROCEEDING
+func reviewBackupConfig(app *BackupApp) {
+	fmt.Println()
+    style.Signature("========  Backup Configuration Review  ========")
+	fmt.Println()
+    style.Plain("Config file: %s\n", app.configFile)
+	style.Plain("Backup destination: %s\n", app.bkpDestFullPath)
+	style.Plain("Min free space: %s\n", app.BkpConfig.Retention.MinFreeSpace)
+	style.Plain("Backups to keep: %d\n", app.BkpConfig.Retention.BackupsToKeep)
+    style.Plain("Run once: %t\n", app.runOnce)    
+    style.Plain("Non-interactive: %t\n", app.nonInteractive)
+	style.Plain("Exit on error: %t\n", app.exitOnError)
+	fmt.Println()
+
+	style.Plain("Items to backup: %d\n", len(app.BkpConfig.BkpItems))
+	if len(app.BkpConfig.BkpItems) == 0 {
+		style.Warn("No items listed under 'bkp_items' in the config file, nothing to backup. Exiting.")
+		fmt.Println()
+		os.Exit(0)
+	}
+
+    for i, item := range app.BkpConfig.BkpItems {
+        fmt.Printf("  [%d] Source: %s\n", i+1, item.Source)
+        fmt.Printf("      Destination: %s\n", item.Destination)
+        if len(item.Include) > 0 {
+            fmt.Printf("      Include: %v\n", strings.Join(item.Include, ", "))
+        }
+        if len(item.Exclude) > 0 {
+            fmt.Printf("      Exclude: %v\n", strings.Join(item.Exclude, ", "))
+        }
+    }
+
+    if app.nonInteractive {
+        return
+    }
+
+    style.Prompt("Proceed with backup? (only \"yes\" will be accepted)")
+    var response string
+    fmt.Scanln(&response)
+	fmt.Println()
+    response = strings.TrimSpace(strings.ToLower(response))
+    if response != "yes" {
+        style.WarnLite("Backup cancelled by user.")
+		fmt.Println()
+        os.Exit(0)
+    }
+}
+
+
+//////////////  BACKUP FUNCTIONS  /////////////////////////////////////////////
 
 // func (app *BackupApp) runScheduledBackup() {
 // 	c := cron.New()

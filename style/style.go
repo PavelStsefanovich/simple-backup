@@ -52,7 +52,9 @@ func Sub(format string, a ...any) {
 // Print user prompt message
 func Prompt(format string, a ...any) {
     msg := fmt.Sprintf(format, a...)
-    fmt.Print(_info("\n%s", msg))
+    fmt.Println()
+    fmt.Print(_info(msg))
+    fmt.Print(_info(":\n  "))
 }
 
 // Print info message with partial styling
