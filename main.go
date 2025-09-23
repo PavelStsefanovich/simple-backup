@@ -4,19 +4,18 @@ import (
 	// "bufio"
 	"flag"
 	"fmt"
+	// "github.com/robfig/cron/v3"
+	"gopkg.in/yaml.v3"
 	// "log"
 	"os"
 	"math/rand"
 	"regexp"
 	"path/filepath"
 	"runtime"
+	"simple-backup/style"
 	"strconv"
 	"strings"
 	"time"
-
-	"simple-backup/style"
-	// "github.com/robfig/cron/v3"
-	"gopkg.in/yaml.v3"
 
 	// debug
 	// "reflect"
@@ -26,11 +25,13 @@ import (
 
 // Limits and Defaults
 const (
+	BackupDestDirDefault string  	= "smbkp"
+	ConfigFileDefault string		= ".smbkp.yaml"
+	LimitMinBackupsToKeep int		= 1
 	LimitMinFreeSpace string		= "10mb"
 	LimitMinFreeSpaceParsed int64	= 10485760
 	MinFreeSpacePattern	string		= `^\d+(mb|gb)$`
-	LimitMinBackupsToKeep int		= 1
-	BackupDestDirDefault			= "smbkp"
+	Version string					= "0.1.0"
 )
 
 
@@ -77,6 +78,7 @@ type BackupApp struct {
 	bkpDest         string
 	bkpDestFullPath	string
 	exitOnError     bool
+	// logFilePath		string //TODO To be implemented
 	nonInteractive  bool
 	runOnce			bool
 }
@@ -97,27 +99,23 @@ func main() {
 	)
 	flag.Parse()
 
-	// Vars
-	configFileDefault := ".smbkp.yaml"
-	version			  := "v0.1.0"
-
 	// Show help
 	if *showHelp {
-		printHelp(configFileDefault)
+		printHelp()
 		return
 	}
 
 	// Show version
 	if *showVersion {
-		printVersion(version)
+		printVersion()
 		return
 	}
 
-	// (debug) Show Backup struct 
+	// (debug) Show Backup struct
 	// helpers.PrintYAMLKeysForType(reflect.TypeOf(BackupApp{}))
 
 	// Initiate main app
-	app, err := NewBackupApp(*bkpDest, *configFile, configFileDefault, *exitOnError, *nonInteractive, *runOnce)
+	app, err := NewBackupApp(*bkpDest, *configFile, *exitOnError, *nonInteractive, *runOnce)
 	if err != nil {
 		style.Err("Failed to initialize application: %v", err)
 		os.Exit(1)
@@ -148,7 +146,7 @@ func main() {
 
 
 // PRINT HELP
-func printHelp(configFileDefault string) {
+func printHelp() {
 	fmt.Println()
 	style.Signature("===============  Simple Backup  ===============")
 	fmt.Println()
@@ -159,21 +157,21 @@ func printHelp(configFileDefault string) {
 	flag.PrintDefaults()
 	fmt.Println()
 	style.Sub("If -bkp-dest is not provided, the app will search for the first drive/mount")
-	style.Sub("that contains '" + configFileDefault + "' file in its root directory.")
+	style.Sub("that contains '" + ConfigFileDefault + "' file in its root directory.")
 	fmt.Println()
 }
 
 
 // PRINT VERSION
-func printVersion(version string) {
+func printVersion() {
 	style.Signature("Simple Backup")
-	style.Plain(version)
+	style.Plain("v%s", Version)
 	fmt.Println()
 }
 
 
 // MAIN APP INIT
-func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, nonInteractive, runOnce bool) (*BackupApp, error) {
+func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive, runOnce bool) (*BackupApp, error) {
 	app := &BackupApp{
 		BkpConfig:		*NewConfig(), // Set defaults first
 		bkpDest:        bkpDest,
@@ -229,9 +227,9 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 		}
 
 		// Search for the first destination with default backup config file in it's root
-		style.Plain("Searching for %q file in the root of available drives and mount points... ", configFileDefault)
+		style.Plain("Searching for %q file in the root of available drives and mount points... ", ConfigFileDefault)
 		for _, drive := range drives {
-			configFile := filepath.Join(drive, configFileDefault)
+			configFile := filepath.Join(drive, ConfigFileDefault)
 			if _, err := os.Stat(configFile); err == nil {
 				// Found a backup destination candidate
 				style.Ok("")
@@ -252,7 +250,7 @@ func NewBackupApp(bkpDest, configFile, configFileDefault string, exitOnError, no
 
 	// Case: Backup Destination is explicitly specified by user, but Config File is NOT
 	if app.configFile == "" {
-		configFile := filepath.Join(app.bkpDest, configFileDefault)
+		configFile := filepath.Join(app.bkpDest, ConfigFileDefault)
 		style.InfoLite("%q is not specified. Assuming default config file in the root of backup destination.", "-config")
 		style.Plain("Reading assumed config file %q... ", configFile)
 		if err := app.loadConfig(configFile); err != nil {
@@ -340,7 +338,7 @@ func (c *Config) validate() error {
 	if minFreeSpaceParsed < LimitMinFreeSpaceParsed {
 		msg := fmt.Sprintf("%q value increased from '%s' to '%s', which is allowed minimum.", "min_free_space", c.Retention.MinFreeSpace, LimitMinFreeSpace)
 		style.WarnLite(msg)
-		c.Retention.MinFreeSpace = LimitMinFreeSpace		
+		c.Retention.MinFreeSpace = LimitMinFreeSpace
 		c.Retention.minFreeSpaceParsed = LimitMinFreeSpaceParsed
 	}
 	c.Retention.minFreeSpaceParsed = minFreeSpaceParsed
