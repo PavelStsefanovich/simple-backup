@@ -116,7 +116,7 @@ func main() {
 		return
 	}
 
-	// (debug) Show Backup struct
+	// (debug) Show Backup App object
 	// helpers.PrintYAMLKeysForType(reflect.TypeOf(BackupApp{}))
 
 	// Initiate main app
@@ -131,15 +131,8 @@ func main() {
 	// Review backup configuration before proceeding
 	reviewBackupConfig(app)
 
-	//TODO Validate against the empty bkp_items[] list
 
-
-	// DELETE (debug) current end
-	style.Info("This is the end (currently)")
-	fmt.Println(app)
-	return
-
-	// Run once
+	// Run backup once
 	// if *runOnce || app.BkpConfig.Schedule == nil {
 	// 	if err := app.runBackup(); err != nil {
 	// 		log.Fatalf("Backup failed: %v", err)
@@ -147,6 +140,13 @@ func main() {
 	// 	return
 	// }
 
+
+	// DELETE (debug) current end
+	style.Info("This is the end (currently)")
+	fmt.Println(app)
+	return
+
+	
 	// Run scheduled backup
 	// app.runScheduledBackup()
 }
@@ -351,6 +351,14 @@ func (c *Config) validate() error {
 	}
 	c.Retention.minFreeSpaceParsed = minFreeSpaceParsed
 
+	// Set destination attribute of each item under bkp_items to item's source leaf, if destination is not specified
+	for i := range c.BkpItems {
+		if c.BkpItems[i].Destination == "" {
+			c.BkpItems[i].Destination = filepath.Base(c.BkpItems[i].Source)
+		}
+	}
+
+
 	// Future validation for schedule type, etc., can be added here.
 	return nil
 }
@@ -486,6 +494,15 @@ func reviewBackupConfig(app *BackupApp) {
 
 
 //////////////  BACKUP FUNCTIONS  /////////////////////////////////////////////
+
+
+
+
+
+
+
+
+
 
 // func (app *BackupApp) runScheduledBackup() {
 // 	c := cron.New()
