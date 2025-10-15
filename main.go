@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 	// "log"
 	"os"
-	"math/rand"
+	// "math/rand"
 	"regexp"
 	"path/filepath"
 	"runtime"
@@ -19,7 +19,6 @@ import (
 
 	// debug
 	// "reflect"
-	// "simple-backup/helpers"
 )
 
 
@@ -31,6 +30,7 @@ const (
 	LimitMinFreeSpace string		= "10mb"
 	LimitMinFreeSpaceParsed int64	= 10485760
 	MinFreeSpacePattern	string		= `^\d+(mb|gb)$`
+	Prefix string					= "smbkp"
 	Version string					= "0.1.0"
 )
 
@@ -118,6 +118,7 @@ func main() {
 
 	// (debug) Show Backup App object
 	// helpers.PrintYAMLKeysForType(reflect.TypeOf(BackupApp{}))
+	// printYAMLKeysForType(reflect.TypeOf(BackupApp{}))
 
 	// Initiate main app
 	app, err := NewBackupApp(*bkpDest, *configFile, *exitOnError, *nonInteractive, *runOnce)
@@ -129,16 +130,17 @@ func main() {
 	}
 
 	// Review backup configuration before proceeding
-	reviewBackupConfig(app)
-
+	if err = reviewBackupConfig(app); err != nil {
+		style.Err("Validation failied: %v", err)
+	}
 
 	// Run backup once
-	// if *runOnce || app.BkpConfig.Schedule == nil {
-	// 	if err := app.runBackup(); err != nil {
-	// 		log.Fatalf("Backup failed: %v", err)
-	// 	}
-	// 	return
-	// }
+	if *runOnce || app.BkpConfig.Schedule == nil {
+		if err := app.runBackup(); err != nil {
+			style.Err("Backup failed: %v", err)
+		}
+		return
+	}
 
 
 	// DELETE (debug) current end
@@ -265,9 +267,9 @@ func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive, runOn
 		}
 	}
 
-	// Creating full backup destination path (bkpDest/bkp_dest_dir/<unique_dir>)
-	fullPath, _ := generateUniquePath(app.bkpDest, app.BkpConfig.BkpDestDir)
-	app.bkpDestFullPath = fullPath
+	// Creating full backup destination path (bkpDest/bkp_dest_dir/<unique_dir>) #REVIEW The usnique path can be constructed using the timestamp wnen backup starts
+	// fullPath, _ := generateUniquePath(app.bkpDest, app.BkpConfig.BkpDestDir)
+	app.bkpDestFullPath = filepath.Join(app.bkpDest, app.BkpConfig.BkpDestDir)
 
 	return app, nil
 }
@@ -423,41 +425,62 @@ func getAvailableDrives() ([]string, error) {
 
 
 // CREATE UNIQUE DIRECTORY FOR THE BACKUP RUN
-func generateUniquePath(baseDir, subDir string) (string, error) {
-	// Join parent directories
-	parentDirPath := filepath.Join(baseDir, subDir)
+// func generateUniquePath(baseDir, subDir string) (string, error) {
+// 	// Join parent directories
+// 	parentDirPath := filepath.Join(baseDir, subDir)
 
-	// Generate a unique directory name
-	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+// 	// Generate a unique directory name
+// 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+// 	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	b := make([]byte, 10)
-	for i := range b {
-		b[i] = charset[seededRand.Intn(len(charset))]
-	}
-	uniqueName := fmt.Sprintf("smbkp-%s", string(b))
+// 	b := make([]byte, 10)
+// 	for i := range b {
+// 		b[i] = charset[seededRand.Intn(len(charset))]
+// 	}
+// 	uniqueName := fmt.Sprintf("smbkp-%s", string(b))
 
-	// Combine parent directories with unique directory into full path
-	fullPath := filepath.Join(parentDirPath, uniqueName)
+// 	// Combine parent directories with unique directory into full path
+// 	fullPath := filepath.Join(parentDirPath, uniqueName)
 
-	return fullPath, nil
-}
+// 	return fullPath, nil
+// }
 
 
 // REVIEW BACKUP CONFIGURATION BEFORE PROCEEDING
-func reviewBackupConfig(app *BackupApp) {
+func reviewBackupConfig(app *BackupApp) error {
 	fmt.Println()
-    style.Signature("========  Backup Configuration Review  ========")
+    style.Signature("=======  Backup Configuration Overview  =======")
 	fmt.Println()
-    style.Plain("Config file: %s\n", app.configFile)
-	style.Plain("Backup destination: %s\n", app.bkpDestFullPath)
-	style.Plain("Min free space: %s\n", app.BkpConfig.Retention.MinFreeSpace)
-	style.Plain("Backups to keep: %d\n", app.BkpConfig.Retention.BackupsToKeep)
-    style.Plain("Run once: %t\n", app.runOnce)    
-    style.Plain("Non-interactive: %t\n", app.nonInteractive)
-	style.Plain("Exit on error: %t\n", app.exitOnError)
+    style.PlainLn("Config file: %s", app.configFile)
+	style.PlainLn("Backup destination: %s", app.bkpDestFullPath)
+	
+	// Validate min_free_space
+	style.Plain("Min free space: %s ", app.BkpConfig.Retention.MinFreeSpace)
+	availableFreeSpace, err := getFreeSpace(app.bkpDestFullPath)
+	if err != nil {
+		return fmt.Errorf("checking free space: %w", err)
+	}
+
+	style.PlainLn("(available free space: %d)", availableFreeSpace)
+
+
+	style.Plain("Creating backup directory %q...", app.bkpDestFullPath)
+	if err := os.MkdirAll(app.bkpDestFullPath, 0755); err != nil {
+		style.PlainLn("")
+		return fmt.Errorf("creating backup directory: %w", err)
+	}
+	style.Ok("")
+	
+
+
+
+	style.PlainLn("Backups to keep: %d", app.BkpConfig.Retention.BackupsToKeep)
+    style.PlainLn("Run once: %t", app.runOnce)    
+    style.PlainLn("Non-interactive: %t", app.nonInteractive)
+	style.PlainLn("Exit on error: %t", app.exitOnError)
 	fmt.Println()
 
+	// Validate bkp_items
 	style.Plain("Items to backup: %d\n", len(app.BkpConfig.BkpItems))
 	if len(app.BkpConfig.BkpItems) == 0 {
 		style.Warn("No items listed under 'bkp_items' in the config file, nothing to backup. Exiting.")
@@ -477,7 +500,7 @@ func reviewBackupConfig(app *BackupApp) {
     }
 
     if app.nonInteractive {
-        return
+        return nil
     }
 
     style.Prompt("Proceed with backup? (only \"yes\" will be accepted)")
@@ -490,13 +513,104 @@ func reviewBackupConfig(app *BackupApp) {
 		fmt.Println()
         os.Exit(0)
     }
+	return nil
 }
 
 
 //////////////  BACKUP FUNCTIONS  /////////////////////////////////////////////
 
+// EXECUTE BACKUP
+func (app *BackupApp) runBackup() error {
+	startTime := time.Now()
+	timestamp := startTime.Format("20060102-150405")
 
+	fmt.Println()
+	style.Signature("Backup stated on: %s", startTime.Format(time.RFC822))
 
+	// Create backup directory
+	app.bkpDestFullPath = filepath.Join(app.bkpDestFullPath, fmt.Sprintf("%s-%s", Prefix, timestamp))
+	style.Plain("Creating backup directory %q...", app.bkpDestFullPath)
+	if err := os.MkdirAll(app.bkpDestFullPath, 0755); err != nil {
+		style.PlainLn("")
+		return fmt.Errorf("creating backup directory: %w", err)
+	}
+	style.Ok("")
+
+	// Copy backup items
+	// var results []BackupResult
+	// var failedCount int
+
+	for i, item := range app.BkpConfig.BkpItems {
+		fmt.Printf("[%d/%d] Backing up: %s\n", i+1, len(app.BkpConfig.BkpItems), item.Source)
+
+		// itemStart := time.Now()
+		// err := app.backupItem(item)
+		// elapsed := time.Since(itemStart)
+
+		// result := BackupResult{
+		// 	Item:    item,
+		// 	Success: err == nil,
+		// 	Error:   err,
+		// 	Elapsed: elapsed,
+		// }
+		// results = append(results, result)
+
+		// if err != nil {
+		// 	failedCount++
+		// 	fmt.Printf("❌ FAILED (%v): %v\n", elapsed, err)
+
+		// 	if app.exitOnError {
+		// 		if !app.nonInteractive {
+		// 			fmt.Print("Exit due to error? (Y/n): ")
+		// 			reader := bufio.NewReader(os.Stdin)
+		// 			response, _ := reader.ReadString('\n')
+		// 			response = strings.TrimSpace(strings.ToLower(response))
+		// 			if response != "n" && response != "no" {
+		// 				return fmt.Errorf("backup stopped due to error: %w", err)
+		// 			}
+		// 		} else {
+		// 			return fmt.Errorf("backup stopped due to error: %w", err)
+		// 		}
+		// 	}
+		// } else {
+		// 	fmt.Printf("✅ SUCCESS (%v)\n", elapsed)
+		// }
+	}
+
+	// totalElapsed := time.Since(startTime)
+
+	// // Print summary
+	// fmt.Printf("\n=== Backup Summary ===\n")
+	// fmt.Printf("Total time: %v\n", totalElapsed)
+	// fmt.Printf("Total items: %d\n", len(results))
+	// fmt.Printf("Successful: %d\n", len(results)-failedCount)
+	// fmt.Printf("Failed: %d\n", failedCount)
+
+	// fmt.Printf("\n=== Detailed Results ===\n")
+	// for i, result := range results {
+	// 	status := "✅"
+	// 	if !result.Success {
+	// 		status = "❌"
+	// 	}
+	// 	fmt.Printf("[%d] %s %s (%v)\n", i+1, status, result.Item.Source, result.Elapsed)
+	// 	if result.Error != nil {
+	// 		fmt.Printf("    Error: %v\n", result.Error)
+	// 	}
+	// }
+
+	// // Cleanup old backups
+	// if err := app.cleanupOldBackups(); err != nil {
+	// 	fmt.Printf("Warning: Failed to cleanup old backups: %v\n", err)
+	// }
+
+	// if failedCount > 0 {
+	// 	return fmt.Errorf("backup completed with %d failures", failedCount)
+	// }
+
+	fmt.Println()
+	style.Success("Backup completed successfully!")
+	return nil
+}
 
 
 
@@ -549,114 +663,11 @@ func reviewBackupConfig(app *BackupApp) {
 // 	}
 // }
 
-// func (app *BackupApp) runBackup() error {
-// 	startTime := time.Now()
 
-// 	// Create backup directory
-// 	timestamp := time.Now().Format("20060102-150405")
-// 	app.BkpConfig.bkpDestDir = filepath.Join(app.bkpDest, app.BkpConfig.bkpDestDir, fmt.Sprintf("psbkp-%s", timestamp))
-
-// 	fmt.Printf("\n=== Backup Configuration ===\n")
-// 	fmt.Printf("Backup destination: %s\n", app.bkpDest)
-// 	fmt.Printf("Backup directory: %s\n", app.BkpConfig.bkpDestDir)
-// 	fmt.Printf("Items to backup: %d\n", len(app.BkpConfig.BkpItems))
-// 	fmt.Printf("Exit on error: %t\n", app.exitOnError)
-
-// 	if !app.nonInteractive {
-// 		fmt.Print("\nProceed with backup? (y/N): ")
-// 		reader := bufio.NewReader(os.Stdin)
-// 		response, _ := reader.ReadString('\n')
-// 		response = strings.TrimSpace(strings.ToLower(response))
-// 		if response != "y" && response != "yes" {
-// 			fmt.Println("Backup cancelled.")
-// 			return nil
-// 		}
-// 	}
-
-// 	// Create backup directory
-// 	if err := os.MkdirAll(app.BkpConfig.bkpDestDir, 0755); err != nil {
-// 		return fmt.Errorf("creating backup directory: %w", err)
-// 	}
-
-// 	fmt.Printf("\n=== Starting Backup ===\n")
-
-// 	var results []BackupResult
-// 	var failedCount int
-
-// 	for i, item := range app.BkpConfig.BkpItems {
-// 		fmt.Printf("\n[%d/%d] Backing up: %s\n", i+1, len(app.BkpConfig.BkpItems), item.Source)
-
-// 		itemStart := time.Now()
-// 		err := app.backupItem(item)
-// 		elapsed := time.Since(itemStart)
-
-// 		result := BackupResult{
-// 			Item:    item,
-// 			Success: err == nil,
-// 			Error:   err,
-// 			Elapsed: elapsed,
-// 		}
-// 		results = append(results, result)
-
-// 		if err != nil {
-// 			failedCount++
-// 			fmt.Printf("❌ FAILED (%v): %v\n", elapsed, err)
-
-// 			if app.exitOnError {
-// 				if !app.nonInteractive {
-// 					fmt.Print("Exit due to error? (Y/n): ")
-// 					reader := bufio.NewReader(os.Stdin)
-// 					response, _ := reader.ReadString('\n')
-// 					response = strings.TrimSpace(strings.ToLower(response))
-// 					if response != "n" && response != "no" {
-// 						return fmt.Errorf("backup stopped due to error: %w", err)
-// 					}
-// 				} else {
-// 					return fmt.Errorf("backup stopped due to error: %w", err)
-// 				}
-// 			}
-// 		} else {
-// 			fmt.Printf("✅ SUCCESS (%v)\n", elapsed)
-// 		}
-// 	}
-
-// 	totalElapsed := time.Since(startTime)
-
-// 	// Print summary
-// 	fmt.Printf("\n=== Backup Summary ===\n")
-// 	fmt.Printf("Total time: %v\n", totalElapsed)
-// 	fmt.Printf("Total items: %d\n", len(results))
-// 	fmt.Printf("Successful: %d\n", len(results)-failedCount)
-// 	fmt.Printf("Failed: %d\n", failedCount)
-
-// 	fmt.Printf("\n=== Detailed Results ===\n")
-// 	for i, result := range results {
-// 		status := "✅"
-// 		if !result.Success {
-// 			status = "❌"
-// 		}
-// 		fmt.Printf("[%d] %s %s (%v)\n", i+1, status, result.Item.Source, result.Elapsed)
-// 		if result.Error != nil {
-// 			fmt.Printf("    Error: %v\n", result.Error)
-// 		}
-// 	}
-
-// 	// Cleanup old backups
-// 	if err := app.cleanupOldBackups(); err != nil {
-// 		fmt.Printf("Warning: Failed to cleanup old backups: %v\n", err)
-// 	}
-
-// 	if failedCount > 0 {
-// 		return fmt.Errorf("backup completed with %d failures", failedCount)
-// 	}
-
-// 	fmt.Println("\n🎉 Backup completed successfully!")
-// 	return nil
-// }
 
 // func (app *BackupApp) backupItem(item BackupItem) error {
 // 	srcPath := item.Source
-// 	destPath := filepath.Join(app.BkpConfig.bkpDestDir, item.Destination)
+// 	destPath := filepath.Join(app.bkpDestFullPath, item.Destination)
 
 // 	// Ensure destination directory exists
 // 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
@@ -778,7 +789,7 @@ func reviewBackupConfig(app *BackupApp) {
 // }
 
 // func (app *BackupApp) cleanupOldBackups() error {
-// 	backupRoot := filepath.Join(app.bkpDest, app.BkpConfig.bkpDestDir)
+// 	backupRoot := filepath.Join(app.bkpDest, app.bkpDestFullPath)
 
 // 	entries, err := os.ReadDir(backupRoot)
 // 	if err != nil {

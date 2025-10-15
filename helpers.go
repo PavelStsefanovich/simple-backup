@@ -1,4 +1,4 @@
-package helpers
+package main
 
 import (
     "fmt"
@@ -9,7 +9,7 @@ import (
 
 // getYAMLKeysRecursively inspects a Go type and returns a nested map
 // representing the YAML keys and subkeys, with empty placeholders for values.
-func GetYAMLKeysRecursively(t reflect.Type) (interface{}, error) {
+func getYAMLKeysRecursively(t reflect.Type) (interface{}, error) {
     if t.Kind() == reflect.Ptr {
         t = t.Elem()
     }
@@ -29,7 +29,7 @@ func GetYAMLKeysRecursively(t reflect.Type) (interface{}, error) {
             if keyName == "-" {
                 continue
             }
-            subKeys, err := GetYAMLKeysRecursively(field.Type)
+            subKeys, err := getYAMLKeysRecursively(field.Type)
             if err != nil {
                 return nil, err
             }
@@ -39,7 +39,7 @@ func GetYAMLKeysRecursively(t reflect.Type) (interface{}, error) {
 
     case reflect.Slice:
         elemType := t.Elem()
-        elem, err := GetYAMLKeysRecursively(elemType)
+        elem, err := getYAMLKeysRecursively(elemType)
         if err != nil {
             return nil, err
         }
@@ -48,11 +48,11 @@ func GetYAMLKeysRecursively(t reflect.Type) (interface{}, error) {
     case reflect.Map:
         keyType := t.Key()
         valType := t.Elem()
-        mapKey, err := GetYAMLKeysRecursively(keyType)
+        mapKey, err := getYAMLKeysRecursively(keyType)
         if err != nil {
             return nil, err
         }
-        mapVal, err := GetYAMLKeysRecursively(valType)
+        mapVal, err := getYAMLKeysRecursively(valType)
         if err != nil {
             return nil, err
         }
@@ -71,8 +71,8 @@ func GetYAMLKeysRecursively(t reflect.Type) (interface{}, error) {
 }
 
 // Print YAML structure for debug purposes
-func PrintYAMLKeysForType(t reflect.Type) {
-    keyStructure, err := GetYAMLKeysRecursively(t)
+func printYAMLKeysForType(t reflect.Type) {
+    keyStructure, err := getYAMLKeysRecursively(t)
     if err != nil {
         fmt.Printf("Error generating YAML keys: %v\n", err)
         return
