@@ -12,7 +12,7 @@ import (
 	"regexp"
 	"path/filepath"
 	"runtime"
-	"simple-backup/style"
+	"simple-backup/src/style"
 	"strconv"
 	"strings"
 	"time"
