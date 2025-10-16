@@ -10,11 +10,11 @@ import (
 
 // getFreeSpace retrieves the free disk space in bytes for the given path.
 // This version is for Windows.
-func getFreeSpace(path string) (uint64, error) {
+func getFreeSpace(path string) (uint64, string, error) {
 	// The Windows API requires a pointer to a string with null termination.
 	pathPtr, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
-		return 0, fmt.Errorf("failed to convert path to UTF16: %w", err)
+		return 0, "", fmt.Errorf("failed to convert path to UTF16: %w", err)
 	}
 
 	var freeBytesAvailableToCaller uint64
@@ -29,8 +29,8 @@ func getFreeSpace(path string) (uint64, error) {
 	)
 	
 	if err != nil && err.Error() != "The operation completed successfully." {
-		return 0, fmt.Errorf("failed to get free space for %s: %w", path, err)
+		return 0, "", fmt.Errorf("failed to get free space for %s: %w", path, err)
 	}
 
-	return freeBytesAvailableToCaller, nil
+	return freeBytesAvailableToCaller, formatBytes(freeBytesAvailableToCaller), nil
 }

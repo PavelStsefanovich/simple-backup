@@ -11,9 +11,7 @@ import (
 	// "math/rand"
 	"regexp"
 	"path/filepath"
-	"runtime"
 	"simple-backup/src/style"
-	"strconv"
 	"strings"
 	"time"
 
@@ -26,9 +24,9 @@ import (
 const (
 	BackupDestDirDefault string  	= "smbkp"
 	ConfigFileDefault string		= ".smbkp.yaml"
-	LimitMinBackupsToKeep int		= 1
+	LimitMinBackupsToKeep uint16	= 1
 	LimitMinFreeSpace string		= "10mb"
-	LimitMinFreeSpaceParsed int64	= 10485760
+	LimitMinFreeSpaceParsed uint64	= 10485760
 	MinFreeSpacePattern	string		= `^\d+(mb|gb)$`
 	Prefix string					= "smbkp"
 	Version string					= "0.1.0"
@@ -47,9 +45,9 @@ type Config struct {
 		Time      	int		`yaml:"time_of_the_day"`
 	} `yaml:"schedule,omitempty"`
 	Retention struct {
-		BackupsToKeep 		int    `yaml:"backups_to_keep"`
+		BackupsToKeep 		uint16    `yaml:"backups_to_keep"`
 		MinFreeSpace  		string `yaml:"min_free_space"`
-		minFreeSpaceParsed	int64	// set implicitly by parsing MinFreeSpace
+		minFreeSpaceParsed	uint64	// set implicitly by parsing MinFreeSpace
 	} `yaml:"retention"`
 	BkpItems []BackupItem `yaml:"bkp_items"`
 }
@@ -90,8 +88,6 @@ type BackupApp struct {
 
 // ENTRY POINT
 func main() {
-	fmt.Println()
-
 	// Command-line args
 	var (
 		configFile      = flag.String("config", "", "Path to configuration file.")
@@ -131,7 +127,8 @@ func main() {
 
 	// Review backup configuration before proceeding
 	if err = reviewBackupConfig(app); err != nil {
-		style.Err("Validation failied: %v", err)
+		style.Err("Review failed: %v", err)
+		return
 	}
 
 	// Run backup once
@@ -280,9 +277,9 @@ func NewConfig() *Config {
 	return &Config{
 		BkpDestDir: BackupDestDirDefault,
 		Retention: struct {
-			BackupsToKeep int    `yaml:"backups_to_keep"`
+			BackupsToKeep uint16    `yaml:"backups_to_keep"`
 			MinFreeSpace  string `yaml:"min_free_space"`
-			minFreeSpaceParsed int64
+			minFreeSpaceParsed uint64
 		}{
 			BackupsToKeep: 		LimitMinBackupsToKeep,
 			MinFreeSpace:  		LimitMinFreeSpace,
@@ -366,113 +363,28 @@ func (c *Config) validate() error {
 }
 
 
-// PARSE DISK SIZE STRING
-func parseDiskSize(sizeStr string) (int64, error) {
-	sizeStr = strings.ToLower(strings.TrimSpace(sizeStr))
-
-	var multiplier int64
-	var valueStr string
-
-	switch {
-	case strings.HasSuffix(sizeStr, "mb"):
-		multiplier = 1024 * 1024
-		valueStr = strings.TrimSuffix(sizeStr, "mb")
-	case strings.HasSuffix(sizeStr, "gb"):
-		multiplier = 1024 * 1024 * 1024
-		valueStr = strings.TrimSuffix(sizeStr, "gb")
-	default:
-		return 0, fmt.Errorf("invalid format: must end with 'mb' or 'gb'")
-	}
-
-	num, err := strconv.ParseInt(strings.TrimSpace(valueStr), 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid number value: %w", err)
-	}
-
-	return num * multiplier, nil
-}
-
-
-// PROVIDE OS-SPECIFIC COMMON DRIVES OR MOUNT POINTS
-func getAvailableDrives() ([]string, error) {
-	var drives []string
-
-	switch runtime.GOOS {
-	case "windows":
-		for _, drive := range "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
-			path := string(drive) + ":\\"
-			if _, err := os.Stat(path); err == nil {
-				drives = append(drives, path)
-			}
-		}
-	case "darwin", "linux":
-		// Check common mount points
-		mountPoints := []string{"/mnt", "/media", "/Volumes"}
-		for _, mountPoint := range mountPoints {
-			if entries, err := os.ReadDir(mountPoint); err == nil {
-				for _, entry := range entries {
-					if entry.IsDir() {
-						fullPath := filepath.Join(mountPoint, entry.Name())
-						drives = append(drives, fullPath)
-					}
-				}
-			}
-		}
-	}
-
-	return drives, nil
-}
-
-
-// CREATE UNIQUE DIRECTORY FOR THE BACKUP RUN
-// func generateUniquePath(baseDir, subDir string) (string, error) {
-// 	// Join parent directories
-// 	parentDirPath := filepath.Join(baseDir, subDir)
-
-// 	// Generate a unique directory name
-// 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-// 	seededRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-// 	b := make([]byte, 10)
-// 	for i := range b {
-// 		b[i] = charset[seededRand.Intn(len(charset))]
-// 	}
-// 	uniqueName := fmt.Sprintf("smbkp-%s", string(b))
-
-// 	// Combine parent directories with unique directory into full path
-// 	fullPath := filepath.Join(parentDirPath, uniqueName)
-
-// 	return fullPath, nil
-// }
-
-
 // REVIEW BACKUP CONFIGURATION BEFORE PROCEEDING
 func reviewBackupConfig(app *BackupApp) error {
 	fmt.Println()
-    style.Signature("=======  Backup Configuration Overview  =======")
+    style.Signature("========  Backup Configuration Review  ========")
 	fmt.Println()
     style.PlainLn("Config file: %s", app.configFile)
 	style.PlainLn("Backup destination: %s", app.bkpDestFullPath)
+
 	
 	// Validate min_free_space
-	style.Plain("Min free space: %s ", app.BkpConfig.Retention.MinFreeSpace)
-	availableFreeSpace, err := getFreeSpace(app.bkpDestFullPath)
+	style.PlainLn("Minimum required free space: %s ", app.BkpConfig.Retention.MinFreeSpace)
+
+	availableFreeSpace, availableFreeSpaceFormatted, err := getFreeSpace(app.bkpDest)
 	if err != nil {
-		return fmt.Errorf("checking free space: %w", err)
+		return fmt.Errorf("reading free space: %w", err)
 	}
 
-	style.PlainLn("(available free space: %d)", availableFreeSpace)
+	style.PlainLn("Available free space: %s", availableFreeSpaceFormatted) // Check space on the root of the backup destination
 
-
-	style.Plain("Creating backup directory %q...", app.bkpDestFullPath)
-	if err := os.MkdirAll(app.bkpDestFullPath, 0755); err != nil {
-		style.PlainLn("")
-		return fmt.Errorf("creating backup directory: %w", err)
-	}
-	style.Ok("")
-	
-
-
+	if availableFreeSpace < app.BkpConfig.Retention.minFreeSpaceParsed {
+		return fmt.Errorf("available free space (%s) is less than required minimum (%s)", availableFreeSpaceFormatted, app.BkpConfig.Retention.MinFreeSpace)
+	}	
 
 	style.PlainLn("Backups to keep: %d", app.BkpConfig.Retention.BackupsToKeep)
     style.PlainLn("Run once: %t", app.runOnce)    
@@ -524,7 +436,6 @@ func (app *BackupApp) runBackup() error {
 	startTime := time.Now()
 	timestamp := startTime.Format("20060102-150405")
 
-	fmt.Println()
 	style.Signature("Backup stated on: %s", startTime.Format(time.RFC822))
 
 	// Create backup directory

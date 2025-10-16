@@ -3,8 +3,17 @@ package main
 import (
     "fmt"
     "gopkg.in/yaml.v3"
+    "os"
+    "path/filepath"
     "reflect"
+    "runtime"
+	"strconv"    
     "strings"
+)
+
+const (
+	MB = 1024 * 1024
+	GB = 1024 * 1024 * 1024
 )
 
 // getYAMLKeysRecursively inspects a Go type and returns a nested map
@@ -83,4 +92,73 @@ func printYAMLKeysForType(t reflect.Type) {
         return
     }
     fmt.Println(string(yamlData))
+}
+
+
+// formatBytes converts a size in bytes to a human-readable string in MB or GB.
+func formatBytes(bytes uint64) string {
+	if bytes < GB {
+		mb := bytes / MB
+		return fmt.Sprintf("%dmb", mb)
+	}
+
+	gb := float64(bytes) / float64(GB)
+	// Format with one decimal place and replace '.' with ','
+	return strings.Replace(fmt.Sprintf("%.1fgb", gb), ".", ",", 1)
+}
+
+// Parse disk size string that is formatted for human readability
+func parseDiskSize(sizeStr string) (uint64, error) {
+	sizeStr = strings.ToLower(strings.TrimSpace(sizeStr))
+
+	var multiplier uint64
+	var valueStr string
+
+	switch {
+	case strings.HasSuffix(sizeStr, "mb"):
+		multiplier = 1024 * 1024
+		valueStr = strings.TrimSuffix(sizeStr, "mb")
+	case strings.HasSuffix(sizeStr, "gb"):
+		multiplier = 1024 * 1024 * 1024
+		valueStr = strings.TrimSuffix(sizeStr, "gb")
+	default:
+		return 0, fmt.Errorf("invalid format: must end with 'mb' or 'gb'")
+	}
+
+	num, err := strconv.ParseInt(strings.TrimSpace(valueStr), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number value: %w", err)
+	}
+
+	return uint64(num) * multiplier, nil
+}
+
+// Provide os-specific common drives or mount points
+func getAvailableDrives() ([]string, error) {
+	var drives []string
+
+	switch runtime.GOOS {
+	case "windows":
+		for _, drive := range "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
+			path := string(drive) + ":\\"
+			if _, err := os.Stat(path); err == nil {
+				drives = append(drives, path)
+			}
+		}
+	case "darwin", "linux":
+		// Check common mount points
+		mountPoints := []string{"/mnt", "/media", "/Volumes"}
+		for _, mountPoint := range mountPoints {
+			if entries, err := os.ReadDir(mountPoint); err == nil {
+				for _, entry := range entries {
+					if entry.IsDir() {
+						fullPath := filepath.Join(mountPoint, entry.Name())
+						drives = append(drives, fullPath)
+					}
+				}
+			}
+		}
+	}
+
+	return drives, nil
 }
