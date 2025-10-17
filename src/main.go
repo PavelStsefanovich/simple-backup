@@ -1,7 +1,7 @@
 package main
 
 import (
-	// "bufio"
+	"bufio"
 	"flag"
 	"fmt"
 	// "github.com/robfig/cron/v3"
@@ -448,44 +448,44 @@ func (app *BackupApp) runBackup() error {
 	style.Ok("")
 
 	// Copy backup items
-	// var results []BackupResult
-	// var failedCount int
+	var results []BackupResult
+	var failedCount int
 
 	for i, item := range app.BkpConfig.BkpItems {
-		fmt.Printf("[%d/%d] Backing up: %s\n", i+1, len(app.BkpConfig.BkpItems), item.Source)
+		fmt.Printf("\n[%d/%d] Backing up: %s\n", i+1, len(app.BkpConfig.BkpItems), item.Source)
 
-		// itemStart := time.Now()
-		// err := app.backupItem(item)
-		// elapsed := time.Since(itemStart)
+		itemStart := time.Now()
+		err := app.backupItem(item)
+		elapsed := time.Since(itemStart)
 
-		// result := BackupResult{
-		// 	Item:    item,
-		// 	Success: err == nil,
-		// 	Error:   err,
-		// 	Elapsed: elapsed,
-		// }
-		// results = append(results, result)
+		result := BackupResult{
+			Item:    item,
+			Success: err == nil,
+			Error:   err,
+			Elapsed: elapsed,
+		}
+		results = append(results, result)
 
-		// if err != nil {
-		// 	failedCount++
-		// 	fmt.Printf("❌ FAILED (%v): %v\n", elapsed, err)
+		if err != nil {
+			failedCount++
+			fmt.Printf("❌ FAILED (%v): %v\n", elapsed, err)
 
-		// 	if app.exitOnError {
-		// 		if !app.nonInteractive {
-		// 			fmt.Print("Exit due to error? (Y/n): ")
-		// 			reader := bufio.NewReader(os.Stdin)
-		// 			response, _ := reader.ReadString('\n')
-		// 			response = strings.TrimSpace(strings.ToLower(response))
-		// 			if response != "n" && response != "no" {
-		// 				return fmt.Errorf("backup stopped due to error: %w", err)
-		// 			}
-		// 		} else {
-		// 			return fmt.Errorf("backup stopped due to error: %w", err)
-		// 		}
-		// 	}
-		// } else {
-		// 	fmt.Printf("✅ SUCCESS (%v)\n", elapsed)
-		// }
+			if app.exitOnError {
+				if !app.nonInteractive {
+					fmt.Print("Exit due to error? (Y/n): ")
+					reader := bufio.NewReader(os.Stdin)
+					response, _ := reader.ReadString('\n')
+					response = strings.TrimSpace(strings.ToLower(response))
+					if response != "n" && response != "no" {
+						return fmt.Errorf("backup stopped due to error: %w", err)
+					}
+				} else {
+					return fmt.Errorf("backup stopped due to error: %w", err)
+				}
+			}
+		} else {
+			fmt.Printf("✅ SUCCESS (%v)\n", elapsed)
+		}
 	}
 
 	// totalElapsed := time.Since(startTime)
@@ -576,128 +576,146 @@ func (app *BackupApp) runBackup() error {
 
 
 
-// func (app *BackupApp) backupItem(item BackupItem) error {
-// 	srcPath := item.Source
-// 	destPath := filepath.Join(app.bkpDestFullPath, item.Destination)
+func (app *BackupApp) backupItem(item BackupItem) error {
+	srcPath := item.Source
+	destPath := filepath.Join(app.bkpDestFullPath, item.Destination)
 
-// 	// Ensure destination directory exists
-// 	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-// 		return fmt.Errorf("creating destination directory: %w", err)
-// 	}
+	// Check if source is a file or directory
+	srcInfo, err := os.Stat(srcPath)
+	if err != nil {
+		return fmt.Errorf("accessing source path: %w", err)
+	}
 
-// 	// Check if source is a file or directory
-// 	srcInfo, err := os.Stat(srcPath)
-// 	if err != nil {
-// 		return fmt.Errorf("accessing source path: %w", err)
-// 	}
+	if srcInfo.IsDir() {
+		if err := os.MkdirAll(destPath, srcInfo.Mode()); err != nil {
+			return fmt.Errorf("creating destination directory: %w", err)
+		}
+		return app.copyDirectory(srcPath, destPath, item.Include, item.Exclude)
+	} else {
+		return app.copyFile(srcPath, destPath)
+	}
+}
 
-// 	if srcInfo.IsDir() {
-// 		return app.copyDirectory(srcPath, destPath, item.Include, item.Exclude)
-// 	} else {
-// 		return app.copyFile(srcPath, destPath)
-// 	}
-// }
+func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 
-// func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string) error {
-// 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-// 		if err != nil {
-// 			return err
-// 		}
+		// Calculate relative path
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
 
-// 		// Calculate relative path
-// 		relPath, err := filepath.Rel(src, path)
-// 		if err != nil {
-// 			return err
-// 		}
+		// Skip root directory
+		if relPath == "." {
+			return nil
+		}
 
-// 		// Skip root directory
-// 		if relPath == "." {
-// 			return nil
-// 		}
+		// Check include/exclude patterns
+		if !app.shouldInclude(relPath, include, exclude) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 
-// 		// Check include/exclude patterns
-// 		if !app.shouldInclude(relPath, include, exclude) {
-// 			if info.IsDir() {
-// 				return filepath.SkipDir
-// 			}
-// 			return nil
-// 		}
+		destPath := filepath.Join(dest, relPath)
 
-// 		destPath := filepath.Join(dest, relPath)
+		// If it's a directory, create it
+		if info.IsDir() {
+			return os.MkdirAll(destPath, info.Mode())
+		}
 
-// 		if info.IsDir() {
-// 			return os.MkdirAll(destPath, info.Mode())
-// 		} else {
-// 			return app.copyFile(path, destPath)
-// 		}
-// 	})
-// }
+		// Handle symlinks
+		if info.Mode()&os.ModeSymlink != 0 {
+			// Check what the symlink points to
+			stat, err := os.Stat(path) // This follows the symlink
+			if err != nil {
+				return err
+			}
+			if stat.IsDir() {
+				// It's a symlink to a directory. Recreate the symlink.
+				target, err := os.Readlink(path)
+				if err != nil {
+					return err
+				}
+				return os.Symlink(target, destPath)
+			}
+			// It's a symlink to a file, fall through to copyFile
+		}
 
-// func (app *BackupApp) shouldInclude(path string, include, exclude []string) bool {
-// 	// If there are include patterns, check if path matches any
-// 	if len(include) > 0 {
-// 		included := false
-// 		for _, pattern := range include {
-// 			if matched, _ := filepath.Match(pattern, path); matched {
-// 				included = true
-// 				break
-// 			}
-// 			// Also check if it's a subdirectory of an included directory
-// 			if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
-// 				included = true
-// 				break
-// 			}
-// 		}
-// 		if !included {
-// 			return false
-// 		}
-// 	}
+		// It's a regular file or a symlink to a file
+		return app.copyFile(path, destPath)
+	})
+}
 
-// 	// Check exclude patterns (exclude takes priority)
-// 	for _, pattern := range exclude {
-// 		if matched, _ := filepath.Match(pattern, path); matched {
-// 			return false
-// 		}
-// 		// Also check if it's a subdirectory of an excluded directory
-// 		if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
-// 			return false
-// 		}
-// 	}
+func (app *BackupApp) shouldInclude(path string, include, exclude []string) bool {
+	// If there are include patterns, check if path matches any
+	if len(include) > 0 {
+		included := false
+		for _, pattern := range include {
+			if matched, _ := filepath.Match(pattern, path); matched {
+				included = true
+				break
+			}
+			// Also check if it's a subdirectory of an included directory
+			if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
+				included = true
+				break
+			}
+		}
+		if !included {
+			return false
+		}
+	}
 
-// 	return true
-// }
+	// Check exclude patterns (exclude takes priority)
+	for _, pattern := range exclude {
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return false
+		}
+		// Also check if it's a subdirectory of an excluded directory
+		if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
+			return false
+		}
+	}
 
-// func (app *BackupApp) copyFile(src, dest string) error {
-// 	// Ensure destination directory exists
-// 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-// 		return err
-// 	}
+	return true
+}
 
-// 	srcFile, err := os.Open(src)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer srcFile.Close()
+func (app *BackupApp) copyFile(src, dest string) error {
+	// Ensure destination directory exists
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return err
+	}
 
-// 	destFile, err := os.Create(dest)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer destFile.Close()
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
 
-// 	_, err = destFile.ReadFrom(srcFile)
-// 	if err != nil {
-// 		return err
-// 	}
+	destFile, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
 
-// 	// Copy file permissions
-// 	srcInfo, err := srcFile.Stat()
-// 	if err != nil {
-// 		return err
-// 	}
+	_, err = destFile.ReadFrom(srcFile)
+	if err != nil {
+		return err
+	}
 
-// 	return os.Chmod(dest, srcInfo.Mode())
-// }
+	// Copy file permissions
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	return os.Chmod(dest, srcInfo.Mode())
+}
 
 // func (app *BackupApp) cleanupOldBackups() error {
 // 	backupRoot := filepath.Join(app.bkpDest, app.bkpDestFullPath)
