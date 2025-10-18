@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	// "github.com/robfig/cron/v3"
@@ -393,7 +394,7 @@ func reviewBackupConfig(app *BackupApp) error {
 	fmt.Println()
 
 	// Validate bkp_items
-	style.Plain("Items to backup: %d\n", len(app.BkpConfig.BkpItems))
+	style.PlainLn("Items to backup: %d", len(app.BkpConfig.BkpItems))
 	if len(app.BkpConfig.BkpItems) == 0 {
 		style.Warn("No items listed under 'bkp_items' in the config file, nothing to backup. Exiting.")
 		fmt.Println()
@@ -401,13 +402,13 @@ func reviewBackupConfig(app *BackupApp) error {
 	}
 
     for i, item := range app.BkpConfig.BkpItems {
-        fmt.Printf("  [%d] Source: %s\n", i+1, item.Source)
-        fmt.Printf("      Destination: %s\n", item.Destination)
+        style.PlainLn("\n  [%d] Source: %s", i+1, item.Source)
+        style.PlainLn("      Destination: %s", item.Destination)
         if len(item.Include) > 0 {
-            fmt.Printf("      Include: %v\n", strings.Join(item.Include, ", "))
+            style.PlainLn("      Include: %v", strings.Join(item.Include, ", "))
         }
         if len(item.Exclude) > 0 {
-            fmt.Printf("      Exclude: %v\n", strings.Join(item.Exclude, ", "))
+            style.PlainLn("      Exclude: %v", strings.Join(item.Exclude, ", "))
         }
     }
 
@@ -452,7 +453,7 @@ func (app *BackupApp) runBackup() error {
 	var failedCount int
 
 	for i, item := range app.BkpConfig.BkpItems {
-		fmt.Printf("\n[%d/%d] Backing up: %s\n", i+1, len(app.BkpConfig.BkpItems), item.Source)
+		style.PlainLn("\n[%d/%d] Backing up: %s", i+1, len(app.BkpConfig.BkpItems), item.Source)
 
 		itemStart := time.Now()
 		err := app.backupItem(item)
@@ -468,7 +469,11 @@ func (app *BackupApp) runBackup() error {
 
 		if err != nil {
 			failedCount++
-			fmt.Printf("❌ FAILED (%v): %v\n", elapsed, err)
+			if errors.Is(err, os.ErrNotExist) {
+				style.PlainLn("❌ %v", err)
+			} else {
+				style.PlainLn("❌ (%v): %v", elapsed, err)
+			}
 
 			if app.exitOnError {
 				if !app.nonInteractive {
@@ -484,7 +489,7 @@ func (app *BackupApp) runBackup() error {
 				}
 			}
 		} else {
-			fmt.Printf("✅ SUCCESS (%v)\n", elapsed)
+			style.Ok("(%v)\n", elapsed)
 		}
 	}
 
