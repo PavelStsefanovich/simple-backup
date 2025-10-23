@@ -38,7 +38,7 @@ const (
 
 // Backup config object
 type Config struct {
-	BkpDestDir 		string `yaml:"bkp_dest_dir"`
+	BkpDestDir		string `yaml:"bkp_dest_dir"`
 	Schedule   *struct {
 		Frequency	string	`yaml:"frequency"`
 		DayOfMonth	int		`yaml:"day_of_the_month,omitempty"`
@@ -146,7 +146,7 @@ func main() {
 	fmt.Println(app)
 	return
 
-	
+
 	// Run scheduled backup
 	// app.runScheduledBackup()
 }
@@ -284,7 +284,7 @@ func NewConfig() *Config {
 		}{
 			BackupsToKeep: 		LimitMinBackupsToKeep,
 			MinFreeSpace:  		LimitMinFreeSpace,
-			minFreeSpaceParsed: LimitMinFreeSpaceParsed,
+			minFreeSpaceParsed:	LimitMinFreeSpaceParsed,
 		},
 		BkpItems: []BackupItem{},
 	}
@@ -372,7 +372,7 @@ func reviewBackupConfig(app *BackupApp) error {
     style.PlainLn("Config file: %s", app.configFile)
 	style.PlainLn("Backup destination: %s", app.bkpDestFullPath)
 
-	
+
 	// Validate min_free_space
 	style.PlainLn("Minimum required free space: %s ", app.BkpConfig.Retention.MinFreeSpace)
 
@@ -385,10 +385,10 @@ func reviewBackupConfig(app *BackupApp) error {
 
 	if availableFreeSpace < app.BkpConfig.Retention.minFreeSpaceParsed {
 		return fmt.Errorf("available free space (%s) is less than required minimum (%s)", availableFreeSpaceFormatted, app.BkpConfig.Retention.MinFreeSpace)
-	}	
+	}
 
 	style.PlainLn("Backups to keep: %d", app.BkpConfig.Retention.BackupsToKeep)
-    style.PlainLn("Run once: %t", app.runOnce)    
+    style.PlainLn("Run once: %t", app.runOnce)
     style.PlainLn("Non-interactive: %t", app.nonInteractive)
 	style.PlainLn("Exit on error: %t", app.exitOnError)
 	fmt.Println()
@@ -441,7 +441,7 @@ func (app *BackupApp) runBackup() error {
 
 	// Create backup directory
 	app.bkpDestFullPath = filepath.Join(app.bkpDestFullPath, fmt.Sprintf("%s-%s", Prefix, timestamp))
-	style.Plain("Creating backup directory %q...", app.bkpDestFullPath)
+	style.Plain("Creating backup directory %q... ", app.bkpDestFullPath)
 	if err := os.MkdirAll(app.bkpDestFullPath, 0755); err != nil {
 		style.PlainLn("")
 		return fmt.Errorf("creating backup directory: %w", err)
@@ -455,8 +455,32 @@ func (app *BackupApp) runBackup() error {
 	for i, item := range app.BkpConfig.BkpItems {
 		style.PlainLn("\n[%d/%d] Backing up: %s", i+1, len(app.BkpConfig.BkpItems), item.Source)
 
+		totalItems, err := app.countTotalItems(item)
+		if err != nil {
+			style.Err("Failed to count items for backup: %v", err)
+			continue
+		}
+
+		var processedItems int
+		lastUpdate := -1
+
+		progressCb := func() {
+			processedItems++
+			if totalItems > 0 {
+				percentage := int(float64(processedItems) * 100 / float64(totalItems))
+				if percentage > lastUpdate {
+					progressBarLength := 50
+					completed := int(float64(percentage) / 100.0 * float64(progressBarLength))
+					progressBar := strings.Repeat("■", completed) + strings.Repeat(".", progressBarLength-completed)
+					style.Plain("\r[%s]", progressBar)
+					lastUpdate = percentage
+				}
+			}
+		}
+
 		itemStart := time.Now()
-		err := app.backupItem(item)
+
+		err = app.backupItem(item, progressCb)
 		elapsed := time.Since(itemStart)
 
 		result := BackupResult{
@@ -470,9 +494,9 @@ func (app *BackupApp) runBackup() error {
 		if err != nil {
 			failedCount++
 			if errors.Is(err, os.ErrNotExist) {
-				style.PlainLn("❌ %v", err)
+				style.PlainLn("\n❌ %v", err)
 			} else {
-				style.PlainLn("❌ (%v): %v", elapsed, err)
+				style.PlainLn("\n❌ (%v): %v", elapsed, err)
 			}
 
 			if app.exitOnError {
@@ -489,7 +513,10 @@ func (app *BackupApp) runBackup() error {
 				}
 			}
 		} else {
-			style.Ok("(%v)\n", elapsed)
+			progressBarLength := 50
+			progressBar := strings.Repeat("■", progressBarLength)
+			style.Plain("\r[%s] ", progressBar)
+			style.Ok("")
 		}
 	}
 
@@ -527,7 +554,6 @@ func (app *BackupApp) runBackup() error {
 	style.Success("Backup completed successfully!")
 	return nil
 }
-
 
 
 
@@ -581,7 +607,7 @@ func (app *BackupApp) runBackup() error {
 
 
 
-func (app *BackupApp) backupItem(item BackupItem) error {
+func (app *BackupApp) backupItem(item BackupItem, progressCb func()) error {
 	srcPath := item.Source
 	destPath := filepath.Join(app.bkpDestFullPath, item.Destination)
 
@@ -595,13 +621,52 @@ func (app *BackupApp) backupItem(item BackupItem) error {
 		if err := os.MkdirAll(destPath, srcInfo.Mode()); err != nil {
 			return fmt.Errorf("creating destination directory: %w", err)
 		}
-		return app.copyDirectory(srcPath, destPath, item.Include, item.Exclude)
+		return app.copyDirectory(srcPath, destPath, item.Include, item.Exclude, progressCb)
 	} else {
-		return app.copyFile(srcPath, destPath)
+		return app.copyFile(srcPath, destPath, progressCb)
 	}
 }
 
-func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string) error {
+func (app *BackupApp) countTotalItems(item BackupItem) (int, error) {
+	var totalItems int
+	srcInfo, err := os.Stat(item.Source)
+	if err != nil {
+		return 0, err
+	}
+
+	if !srcInfo.IsDir() {
+		return 1, nil // A single file
+	}
+
+	err = filepath.Walk(item.Source, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(item.Source, path)
+		if err != nil {
+			return err
+		}
+
+		if relPath == "." {
+			return nil
+		}
+
+		if !app.shouldInclude(relPath, item.Include, item.Exclude) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		totalItems++
+		return nil
+	})
+
+	return totalItems, err
+}
+
+func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string, progressCb func()) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -630,7 +695,11 @@ func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string)
 
 		// If it's a directory, create it
 		if info.IsDir() {
-			return os.MkdirAll(destPath, info.Mode())
+			err := os.MkdirAll(destPath, info.Mode())
+			if err == nil {
+				progressCb()
+			}
+			return err
 		}
 
 		// Handle symlinks
@@ -652,7 +721,7 @@ func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string)
 		}
 
 		// It's a regular file or a symlink to a file
-		return app.copyFile(path, destPath)
+		return app.copyFile(path, destPath, progressCb)
 	})
 }
 
@@ -690,7 +759,7 @@ func (app *BackupApp) shouldInclude(path string, include, exclude []string) bool
 	return true
 }
 
-func (app *BackupApp) copyFile(src, dest string) error {
+func (app *BackupApp) copyFile(src, dest string, progressCb func()) error {
 	// Ensure destination directory exists
 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 		return err
@@ -712,6 +781,8 @@ func (app *BackupApp) copyFile(src, dest string) error {
 	if err != nil {
 		return err
 	}
+
+	progressCb()
 
 	// Copy file permissions
 	srcInfo, err := srcFile.Stat()
