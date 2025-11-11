@@ -471,7 +471,11 @@ func (app *BackupApp) runBackup() error {
 				if percentage > lastUpdate {
 					progressBarLength := 50
 					completed := int(float64(percentage) / 100.0 * float64(progressBarLength))
-					progressBar := strings.Repeat("■", completed) + strings.Repeat(".", progressBarLength-completed)
+					remaining := progressBarLength - completed
+					if remaining < 0 {
+						remaining = 0
+					}
+					progressBar := strings.Repeat("■", completed) + strings.Repeat(".", remaining)
 					style.Plain("\r[%s]", progressBar)
 					lastUpdate = percentage
 				}
