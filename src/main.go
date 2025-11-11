@@ -611,6 +611,9 @@ func (app *BackupApp) runBackup() error {
 
 
 
+
+
+
 func (app *BackupApp) backupItem(item BackupItem, progressCb func()) error {
 	srcPath := item.Source
 	destPath := filepath.Join(app.bkpDestFullPath, item.Destination)
