@@ -823,7 +823,6 @@ func (app *BackupApp) cleanupOldBackups() error {
 	}
 
 	// Sort by name (which includes timestamp) and remove oldest
-	// Note: This is a simplified approach. For production, you might want more sophisticated sorting
 	toDelete := len(backupDirs) - int(app.BkpConfig.Retention.BackupsToKeep)
 
 	if toDelete > 0 {
