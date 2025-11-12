@@ -368,7 +368,6 @@ func (c *Config) validate() error {
 func reviewBackupConfig(app *BackupApp) error {
 	fmt.Println()
     style.Signature("========  Backup Configuration Review  ========")
-	fmt.Println()
     style.PlainLn("Config file: %s", app.configFile)
 	style.PlainLn("Backup destination: %s", app.bkpDestFullPath)
 
@@ -520,42 +519,46 @@ func (app *BackupApp) runBackup() error {
 			progressBarLength := 50
 			progressBar := strings.Repeat("■", progressBarLength)
 			style.Plain("\r[%s] ", progressBar)
-			style.Ok("")
+			style.Ok(" (%s)", result.Elapsed)
 		}
 	}
 
-	// totalElapsed := time.Since(startTime)
+	// Cleanup old backups
+	if err := app.cleanupOldBackups(); err != nil {
+		style.Warn("Failed to cleanup old backups: %v\n", err)
+	}
 
-	// // Print summary
-	// fmt.Printf("\n=== Backup Summary ===\n")
-	// fmt.Printf("Total time: %v\n", totalElapsed)
-	// fmt.Printf("Total items: %d\n", len(results))
-	// fmt.Printf("Successful: %d\n", len(results)-failedCount)
-	// fmt.Printf("Failed: %d\n", failedCount)
+	totalElapsed := time.Since(startTime)
 
-	// fmt.Printf("\n=== Detailed Results ===\n")
-	// for i, result := range results {
-	// 	status := "✅"
-	// 	if !result.Success {
-	// 		status = "❌"
-	// 	}
-	// 	fmt.Printf("[%d] %s %s (%v)\n", i+1, status, result.Item.Source, result.Elapsed)
-	// 	if result.Error != nil {
-	// 		fmt.Printf("    Error: %v\n", result.Error)
-	// 	}
-	// }
+	// Print summary
+	style.PlainLn("")
+	style.Signature("==============  Backup  Summary  ==============")
+	style.PlainLn("Backup destination: %v", app.bkpDestFullPath)
+	style.PlainLn("Total time: %v", totalElapsed)
+	style.PlainLn("Total items: %d", len(results))
+	style.PlainLn("Successful: %d", len(results)-failedCount)
+	style.PlainLn("Failed: %d", failedCount)
 
-	// // Cleanup old backups
-	// if err := app.cleanupOldBackups(); err != nil {
-	// 	fmt.Printf("Warning: Failed to cleanup old backups: %v\n", err)
-	// }
+	style.PlainLn("")
+	style.Signature("Detailed Results")
+	for i, result := range results {
+		status := "✅"
+		if !result.Success {
+			status = "❌"
+		}
+		style.PlainLn("[%d] %s %s (%v)", i+1, status, result.Item.Source, result.Elapsed)
+		if result.Error != nil {
+			style.Err("%v", result.Error)
+		}
+	}
 
-	// if failedCount > 0 {
-	// 	return fmt.Errorf("backup completed with %d failures", failedCount)
-	// }
+	if failedCount > 0 {
+		return fmt.Errorf("backup completed with %d failures", failedCount)
+	}
 
-	fmt.Println()
+	style.PlainLn("")
 	style.Success("Backup completed successfully!")
+	style.PlainLn("")
 	return nil
 }
 
@@ -800,35 +803,41 @@ func (app *BackupApp) copyFile(src, dest string, progressCb func()) error {
 	return os.Chmod(dest, srcInfo.Mode())
 }
 
-// func (app *BackupApp) cleanupOldBackups() error {
-// 	backupRoot := filepath.Join(app.bkpDest, app.bkpDestFullPath)
+func (app *BackupApp) cleanupOldBackups() error {
+	backupRoot := filepath.Dir(app.bkpDestFullPath)
 
-// 	entries, err := os.ReadDir(backupRoot)
-// 	if err != nil {
-// 		return err
-// 	}
+	entries, err := os.ReadDir(backupRoot)
+	if err != nil {
+		return err
+	}
 
-// 	var backupDirs []os.DirEntry
-// 	for _, entry := range entries {
-// 		if entry.IsDir() && strings.HasPrefix(entry.Name(), "psbkp-") {
-// 			backupDirs = append(backupDirs, entry)
-// 		}
-// 	}
+	var backupDirs []os.DirEntry
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), fmt.Sprintf("%s-", Prefix)) {
+			backupDirs = append(backupDirs, entry)
+		}
+	}
 
-// 	if len(backupDirs) <= app.BkpConfig.Retention.BackupsToKeep {
-// 		return nil
-// 	}
+	if len(backupDirs) <= int(app.BkpConfig.Retention.BackupsToKeep) {
+		return nil
+	}
 
-// 	// Sort by name (which includes timestamp) and remove oldest
-// 	// Note: This is a simplified approach. For production, you might want more sophisticated sorting
-// 	toDelete := len(backupDirs) - app.BkpConfig.Retention.BackupsToKeep
-// 	for i := 0; i < toDelete; i++ {
-// 		dirPath := filepath.Join(backupRoot, backupDirs[i].Name())
-// 		fmt.Printf("Removing old backup: %s\n", dirPath)
-// 		if err := os.RemoveAll(dirPath); err != nil {
-// 			return fmt.Errorf("removing old backup %s: %w", dirPath, err)
-// 		}
-// 	}
+	// Sort by name (which includes timestamp) and remove oldest
+	// Note: This is a simplified approach. For production, you might want more sophisticated sorting
+	toDelete := len(backupDirs) - int(app.BkpConfig.Retention.BackupsToKeep)
 
-// 	return nil
-// }
+	if toDelete > 0 {
+		style.PlainLn("")
+		style.Signature("Cleanup")
+	}
+
+	for i := 0; i < toDelete; i++ {
+		dirPath := filepath.Join(backupRoot, backupDirs[i].Name())
+		style.Sub("removing old backup: %s", dirPath)
+		if err := os.RemoveAll(dirPath); err != nil {
+			return fmt.Errorf("removing old backup %s: %w", dirPath, err)
+		}
+	}
+
+	return nil
+}
