@@ -379,7 +379,8 @@ func reviewBackupConfig(app *BackupApp) error {
 	fmt.Println()
     style.Signature("========  Backup Configuration Review  ========")
     style.PlainLn("Config file: %s", app.configFile)
-	style.PlainLn("Backup destination: %s", app.bkpDestFullPath)
+	style.Plain("Backup destination: ")
+	style.Signature(app.bkpDestFullPath)
 
 
 	// Validate min_free_space
