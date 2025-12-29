@@ -22,7 +22,7 @@ import (
 )
 
 
-// Limits and Defaults
+// LIMITS AND DEFAULTS
 const (
 	BackupDestDirDefault string  	= "smbkp"
 	ConfigFileDefault string		= ".smbkp.yaml"
@@ -35,9 +35,10 @@ const (
 )
 
 
+
 //////////////  STRUCTS  //////////////////////////////////////////////////////
 
-// Backup config object
+// BACKUP CONFIG OBJECT
 type Config struct {
 	BkpDestDir		string `yaml:"bkp_dest_dir"`
 	Retention struct {
@@ -49,7 +50,7 @@ type Config struct {
 }
 
 
-// Object for each entry under 'bkp_items'
+// OBJECT FOR EACH ENTRY UNDER 'BKP_ITEMS'
 type BackupItem struct {
 	Source      string   `yaml:"source"`
 	Destination string   `yaml:"destination"`
@@ -58,7 +59,7 @@ type BackupItem struct {
 }
 
 
-// Backup outcome tracking object
+// BACKUP OUTCOME TRACKING OBJECT
 type BackupResult struct {
 	Item    BackupItem
 	Success bool
@@ -67,7 +68,7 @@ type BackupResult struct {
 }
 
 
-// Main application object
+// MAIN APPLICATION OBJECT
 type BackupApp struct {
 	configFile		string
 	BkpConfig       Config
@@ -77,6 +78,7 @@ type BackupApp struct {
 	// logFilePath		string //TODO To be implemented
 	nonInteractive  bool
 }
+
 
 
 //////////////  INIT FUNCTIONS  ///////////////////////////////////////////////
@@ -407,6 +409,7 @@ func reviewBackupConfig(app *BackupApp) error {
 }
 
 
+
 //////////////  BACKUP FUNCTIONS  /////////////////////////////////////////////
 
 // EXECUTE BACKUP
@@ -541,9 +544,7 @@ func (app *BackupApp) runBackup() error {
 }
 
 
-
-
-
+// BACKUP EACH INDIVIDUAL ITEM
 func (app *BackupApp) backupItem(item BackupItem, progressCb func()) error {
 	srcPath := item.Source
 	destPath := filepath.Join(app.bkpDestFullPath, item.Destination)
@@ -564,6 +565,8 @@ func (app *BackupApp) backupItem(item BackupItem, progressCb func()) error {
 	}
 }
 
+
+// COUNT TOTAL NUMBER OF ITEMS TO BACKUP
 func (app *BackupApp) countTotalItems(item BackupItem) (int, error) {
 	var totalItems int
 	srcInfo, err := os.Stat(item.Source)
@@ -603,6 +606,8 @@ func (app *BackupApp) countTotalItems(item BackupItem) (int, error) {
 	return totalItems, err
 }
 
+
+// COPY DIRECTORY
 func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string, progressCb func()) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -662,40 +667,8 @@ func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string,
 	})
 }
 
-func (app *BackupApp) shouldInclude(path string, include, exclude []string) bool {
-	// If there are include patterns, check if path matches any
-	if len(include) > 0 {
-		included := false
-		for _, pattern := range include {
-			if matched, _ := filepath.Match(pattern, path); matched {
-				included = true
-				break
-			}
-			// Also check if it's a subdirectory of an included directory
-			if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
-				included = true
-				break
-			}
-		}
-		if !included {
-			return false
-		}
-	}
 
-	// Check exclude patterns (exclude takes priority)
-	for _, pattern := range exclude {
-		if matched, _ := filepath.Match(pattern, path); matched {
-			return false
-		}
-		// Also check if it's a subdirectory of an excluded directory
-		if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
-			return false
-		}
-	}
-
-	return true
-}
-
+// COPY FILE
 func (app *BackupApp) copyFile(src, dest string, progressCb func()) error {
 	// Ensure destination directory exists
 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
@@ -730,6 +703,44 @@ func (app *BackupApp) copyFile(src, dest string, progressCb func()) error {
 	return os.Chmod(dest, srcInfo.Mode())
 }
 
+
+// EVALUATE INCLUDE/EXCLUDE PATTERNS
+func (app *BackupApp) shouldInclude(path string, include, exclude []string) bool {
+	// If there are include patterns, check if path matches any
+	if len(include) > 0 {
+		included := false
+		for _, pattern := range include {
+			if matched, _ := filepath.Match(pattern, path); matched {
+				included = true
+				break
+			}
+			// Also check if it's a subdirectory of an included directory
+			if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
+				included = true
+				break
+			}
+		}
+		if !included {
+			return false
+		}
+	}
+
+	// Check exclude patterns (exclude takes priority)
+	for _, pattern := range exclude {
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return false
+		}
+		// Also check if it's a subdirectory of an excluded directory
+		if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
+			return false
+		}
+	}
+
+	return true
+}
+
+
+// REMOVE OLDEST BACKUP(S)
 func (app *BackupApp) cleanupOldBackups() error {
 	backupRoot := filepath.Dir(app.bkpDestFullPath)
 
