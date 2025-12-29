@@ -8,7 +8,8 @@ import (
 	// "github.com/robfig/cron/v3"
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
-	// "log"
+	"io"
+	"log"
 	"os"
 	// "math/rand"
 	"regexp"
@@ -75,7 +76,7 @@ type BackupApp struct {
 	bkpDest         string
 	bkpDestFullPath	string
 	exitOnError     bool
-	// logFilePath		string //TODO To be implemented
+	// logDir		string //TODO To be implemented
 	nonInteractive  bool
 }
 
@@ -85,16 +86,44 @@ type BackupApp struct {
 
 // ENTRY POINT
 func main() {
+	// Set default log output to discard
+	log.SetOutput(io.Discard)
+
 	// Command-line args
 	var (
 		configFile     = pflag.StringP("config", "c", "", "Path to configuration file.")
 		bkpDest        = pflag.StringP("bkp-dest", "b", "", "Backup destination drive or mount. Required if -config is specified.")
 		exitOnError    = pflag.BoolP("exit-on-error", "e", false, "Exit immediately on any copy operation failure.")
+		logDir         = pflag.StringP("log-dir", "l", "", "Path to a directory to store log file.")
 		nonInteractive = pflag.BoolP("non-interactive", "n", false, "Skip all user prompts.")
 		showHelp       = pflag.BoolP("help", "h", false, "Show help.")
 		showVersion    = pflag.BoolP("version", "v", false, "Show version info.")
 	)
 	pflag.Parse()
+
+	// Set up logging
+	logStartTime := time.Now()
+	if *logDir != "" {
+		logFileName := fmt.Sprintf("smbkp-%s.log", logStartTime.Format("20060102-150405"))
+		logFilePath := filepath.Join(*logDir, logFileName)
+
+		if err := os.MkdirAll(*logDir, 0755); err != nil {
+			style.Err("Failed to create log directory: %v", err)
+			os.Exit(1)
+		}
+
+		logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+		if err != nil {
+			style.Err("Failed to open log file: %v", err)
+			os.Exit(1)
+		}
+		defer logFile.Close()
+
+		log.SetOutput(logFile)
+		log.Println("[INFO] Logging initialized.")
+		// log.Println("[WARNING] This is a sample warning message.") //DELETE @PS tryout
+		// log.Println("[ERROR] This is a sample error message.") //DELETE @PS tryout
+	}
 
 	// Show help
 	if *showHelp {
@@ -416,6 +445,7 @@ func reviewBackupConfig(app *BackupApp) error {
 func (app *BackupApp) runBackup() error {
 	startTime := time.Now()
 	timestamp := startTime.Format("20060102-150405")
+	// log.Println("[INFO] Backup process started.") //DELETE @PS tryout
 
 	style.Signature("Backup stated on: %s", startTime.Format(time.RFC822))
 
