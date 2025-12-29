@@ -23,7 +23,7 @@ go mod tidy
 go build -o simple-backup ./src
 ```
 
-### For different platforms:
+### Build on Linux for For different platforms:
 
 ```bash
 # Windows
