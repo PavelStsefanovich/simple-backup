@@ -39,12 +39,6 @@ const (
 // Backup config object
 type Config struct {
 	BkpDestDir		string `yaml:"bkp_dest_dir"`
-	Schedule   *struct {
-		Frequency	string	`yaml:"frequency"`
-		DayOfMonth	int		`yaml:"day_of_the_month,omitempty"`
-		DyOfWeek	string	`yaml:"day_of_the_week,omitempty"`
-		Time      	int		`yaml:"time_of_the_day"`
-	} `yaml:"schedule,omitempty"`
 	Retention struct {
 		BackupsToKeep 		uint16    `yaml:"backups_to_keep"`
 		MinFreeSpace  		string `yaml:"min_free_space"`
@@ -81,7 +75,6 @@ type BackupApp struct {
 	exitOnError     bool
 	// logFilePath		string //TODO To be implemented
 	nonInteractive  bool
-	runOnce			bool
 }
 
 
@@ -95,7 +88,6 @@ func main() {
 		bkpDest         = flag.String("bkp-dest", "", "Backup destination drive or mount. Required if -config is specified.")
 		exitOnError     = flag.Bool("exit-on-error", false, "Exit immediately on any copy operation failure.")
 		nonInteractive  = flag.Bool("non-interactive", false, "Skip all user prompts.")
-		runOnce         = flag.Bool("run-once", true, "Run backup once and exit (ignores schedule).")
 		showHelp        = flag.Bool("help", false, "Show help.")
 		showVersion     = flag.Bool("version", false, "Show version info.")
 	)
@@ -118,7 +110,7 @@ func main() {
 	// printYAMLKeysForType(reflect.TypeOf(BackupApp{}))
 
 	// Initiate main app
-	app, err := NewBackupApp(*bkpDest, *configFile, *exitOnError, *nonInteractive, *runOnce)
+	app, err := NewBackupApp(*bkpDest, *configFile, *exitOnError, *nonInteractive)
 	if err != nil {
 		style.Err("Failed to initialize application: %v", err)
 		os.Exit(1)
@@ -132,23 +124,10 @@ func main() {
 		return
 	}
 
-	// Run backup once
-	if *runOnce || app.BkpConfig.Schedule == nil {
-		if err := app.runBackup(); err != nil {
-			style.Err("Backup failed: %v", err)
-		}
-		return
+	// Run backup
+	if err := app.runBackup(); err != nil {
+		style.Err("Backup failed: %v", err)
 	}
-
-
-	// DELETE (debug) current end
-	style.Info("This is the end (currently)")
-	fmt.Println(app)
-	return
-
-
-	// Run scheduled backup
-	// app.runScheduledBackup()
 }
 
 
@@ -178,13 +157,12 @@ func printVersion() {
 
 
 // MAIN APP INIT
-func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive, runOnce bool) (*BackupApp, error) {
+func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive bool) (*BackupApp, error) {
 	app := &BackupApp{
 		BkpConfig:		*NewConfig(), // Set defaults first
 		bkpDest:        bkpDest,
 		exitOnError:    exitOnError,
 		nonInteractive: nonInteractive,
-		runOnce:  		runOnce,
 	}
 
 	// Case: Backup Destination explicitly specified by user
@@ -387,7 +365,6 @@ func reviewBackupConfig(app *BackupApp) error {
 	}
 
 	style.PlainLn("Backups to keep: %d", app.BkpConfig.Retention.BackupsToKeep)
-    style.PlainLn("Run once: %t", app.runOnce)
     style.PlainLn("Non-interactive: %t", app.nonInteractive)
 	style.PlainLn("Exit on error: %t", app.exitOnError)
 	fmt.Println()
@@ -561,57 +538,6 @@ func (app *BackupApp) runBackup() error {
 	style.PlainLn("")
 	return nil
 }
-
-
-
-
-
-
-// func (app *BackupApp) runScheduledBackup() {
-// 	c := cron.New()
-
-// 	cronExpr := app.buildCronExpression()
-// 	fmt.Printf("Scheduling backup with cron expression: %s\n", cronExpr)
-
-// 	_, err := c.AddFunc(cronExpr, func() {
-// 		fmt.Printf("\n=== Scheduled backup started at %s ===\n", time.Now().Format("2006-01-02 15:04:05"))
-// 		if err := app.runBackup(); err != nil {
-// 			log.Printf("Scheduled backup failed: %v", err)
-// 		}
-// 	})
-
-// 	if err != nil {
-// 		log.Fatalf("Failed to schedule backup: %v", err)
-// 	}
-
-// 	c.Start()
-// 	fmt.Println("Backup scheduler started. Press Ctrl+C to exit.")
-
-// 	// Keep the program running
-// 	select {}
-// }
-
-// func (app *BackupApp) buildCronExpression() string {
-// 	schedule := app.BkpConfig.Schedule
-// 	timeParts := strings.Split(schedule.time, ":")
-// 	hour := timeParts[0]
-// 	minute := timeParts[1]
-
-// 	switch schedule.frequency {
-// 	case "daily":
-// 		return fmt.Sprintf("%s %s * * *", minute, hour)
-// 	case "weekly":
-// 		dayMap := map[string]string{
-// 			"Sunday": "0", "Monday": "1", "Tuesday": "2", "Wednesday": "3",
-// 			"Thursday": "4", "Friday": "5", "Saturday": "6",
-// 		}
-// 		dayNum := dayMap[schedule.dayOfWeek]
-// 		return fmt.Sprintf("%s %s * * %s", minute, hour, dayNum)
-// 	default:
-// 		return fmt.Sprintf("%s %s * * *", minute, hour) // Default to daily
-// 	}
-// }
-
 
 
 
