@@ -27,13 +27,13 @@ go build -o simple-backup ./src
 
 ```bash
 # Windows
-GOOS=windows GOARCH=amd64 go build -o smbkp.exe main.go
+GOOS=windows GOARCH=amd64 go build -o simple-backup.exe ./src
 
 # macOS
-GOOS=darwin GOARCH=amd64 go build -o smbkp-darwin main.go
+GOOS=darwin GOARCH=amd64 go build -o simple-backup ./src
 
 # Linux
-GOOS=linux GOARCH=amd64 go build -o smbkp-linux main.go
+GOOS=linux GOARCH=amd64 go build -o simple-backup ./src
 ```
 
 ## Configuration
