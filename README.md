@@ -16,11 +16,11 @@ A cross-platform backup application written in Go that supports scheduled and on
 
 1. Make sure you have Go 1.21 or later installed
 2. Clone or download the source code
-3. Run the following commands:
+3. Run the following commands in the project root directory:
 
 ```bash
 go mod tidy
-go build -o simple-backup main.go
+go build -o simple-backup ./src
 ```
 
 ### For different platforms:
