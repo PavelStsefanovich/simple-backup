@@ -20,7 +20,7 @@ A cross-platform backup application written in Go that supports scheduled and on
 
 ```bash
 go mod tidy
-go build -o smbkp main.go
+go build -o simple-backup main.go
 ```
 
 ### For different platforms:
