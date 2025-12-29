@@ -3,9 +3,10 @@ package main
 import (
 	"bufio"
 	"errors"
-	"flag"
+	// "flag"
 	"fmt"
 	// "github.com/robfig/cron/v3"
+	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
 	// "log"
 	"os"
@@ -40,7 +41,7 @@ const (
 type Config struct {
 	BkpDestDir		string `yaml:"bkp_dest_dir"`
 	Retention struct {
-		BackupsToKeep 		uint16    `yaml:"backups_to_keep"`
+		BackupsToKeep 		uint16 `yaml:"backups_to_keep"`
 		MinFreeSpace  		string `yaml:"min_free_space"`
 		minFreeSpaceParsed	uint64	// set implicitly by parsing MinFreeSpace
 	} `yaml:"retention"`
@@ -84,14 +85,14 @@ type BackupApp struct {
 func main() {
 	// Command-line args
 	var (
-		configFile      = flag.String("config", "", "Path to configuration file.")
-		bkpDest         = flag.String("bkp-dest", "", "Backup destination drive or mount. Required if -config is specified.")
-		exitOnError     = flag.Bool("exit-on-error", false, "Exit immediately on any copy operation failure.")
-		nonInteractive  = flag.Bool("non-interactive", false, "Skip all user prompts.")
-		showHelp        = flag.Bool("help", false, "Show help.")
-		showVersion     = flag.Bool("version", false, "Show version info.")
+		configFile     = pflag.StringP("config", "c", "", "Path to configuration file.")
+		bkpDest        = pflag.StringP("bkp-dest", "b", "", "Backup destination drive or mount. Required if -config is specified.")
+		exitOnError    = pflag.BoolP("exit-on-error", "e", false, "Exit immediately on any copy operation failure.")
+		nonInteractive = pflag.BoolP("non-interactive", "n", false, "Skip all user prompts.")
+		showHelp       = pflag.BoolP("help", "h", false, "Show help.")
+		showVersion    = pflag.BoolP("version", "v", false, "Show version info.")
 	)
-	flag.Parse()
+	pflag.Parse()
 
 	// Show help
 	if *showHelp {
@@ -140,7 +141,7 @@ func printHelp() {
 	fmt.Println("  smbkp [options]")
 	fmt.Println()
 	fmt.Println("Options:")
-	flag.PrintDefaults()
+	pflag.PrintDefaults()
 	fmt.Println()
 	style.Sub("If -bkp-dest is not provided, the app will search for the first drive/mount")
 	style.Sub("that contains '" + ConfigFileDefault + "' file in its root directory.")
