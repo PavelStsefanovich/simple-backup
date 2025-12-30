@@ -132,7 +132,7 @@ func main() {
 
 	// Show version
 	if *showVersion {
-		// printVersion()
+		printVersion()
 		return
 	}
 
@@ -179,12 +179,12 @@ func printHelp() {
 }
 
 
-// // PRINT VERSION
-// func printVersion() {
-// 	logger.Signature("Simple Backup")
-// 	logger.Plain("v%s", Version)
-// 	fmt.Println()
-// }
+// PRINT VERSION
+func printVersion() {
+	logger.Signature("Simple Backup")
+	logger.Plain(fmt.Sprintf("v%s", Version))
+	fmt.Println()
+}
 
 
 // // MAIN APP INIT
