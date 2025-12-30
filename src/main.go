@@ -14,6 +14,7 @@ import (
 	// "math/rand"
 	"regexp"
 	"path/filepath"
+	"simple-backup/src/style"
 	"strings"
 	"time"
 
@@ -107,13 +108,13 @@ func main() {
 		logFilePath := filepath.Join(*logDir, logFileName)
 
 		if err := os.MkdirAll(*logDir, 0755); err != nil {
-			Err("Failed to create log directory: %v", err)
+			style.Err("Failed to create log directory: %v", err)
 			os.Exit(1)
 		}
 
 		logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
-			Err("Failed to open log file: %v", err)
+			style.Err("Failed to open log file: %v", err)
 			os.Exit(1)
 		}
 		defer logFile.Close()
@@ -143,7 +144,7 @@ func main() {
 	// Initiate main app
 	app, err := NewBackupApp(*bkpDest, *configFile, *exitOnError, *nonInteractive)
 	if err != nil {
-		Err("Failed to initialize application: %v", err)
+		style.Err("Failed to initialize application: %v", err)
 		os.Exit(1)
 		// log.Fatalf("Failed to initialize application: %v", err)
 		// return
@@ -151,13 +152,13 @@ func main() {
 
 	// Review backup configuration before proceeding
 	if err = reviewBackupConfig(app); err != nil {
-		Err("Review failed: %v", err)
+		style.Err("Review failed: %v", err)
 		return
 	}
 
 	// Run backup
 	if err := app.runBackup(); err != nil {
-		Err("Backup failed: %v", err)
+		style.Err("Backup failed: %v", err)
 	}
 }
 
@@ -165,24 +166,24 @@ func main() {
 // PRINT HELP
 func printHelp() {
 	fmt.Println()
-	Signature("===============  Simple Backup  ===============")
+	style.Signature("===============  Simple Backup  ===============")
 	fmt.Println()
-	Plain("Usage:")
+	style.Plain("Usage:")
 	fmt.Println("  smbkp [options]")
 	fmt.Println()
 	fmt.Println("Options:")
 	pflag.PrintDefaults()
 	fmt.Println()
-	Sub("If -bkp-dest is not provided, the app will search for the first drive/mount")
-	Sub("that contains '" + ConfigFileDefault + "' file in its root directory.")
+	style.Sub("If -bkp-dest is not provided, the app will search for the first drive/mount")
+	style.Sub("that contains '" + ConfigFileDefault + "' file in its root directory.")
 	fmt.Println()
 }
 
 
 // PRINT VERSION
 func printVersion() {
-	Signature("Simple Backup")
-	Plain("v%s", Version)
+	style.Signature("Simple Backup")
+	style.Plain("v%s", Version)
 	fmt.Println()
 }
 
@@ -198,16 +199,16 @@ func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive bool) 
 
 	// Case: Backup Destination explicitly specified by user
 	if bkpDest != "" {
-		Plain("Trying to access specified backup destination %q... ", bkpDest)
+		style.Plain("Trying to access specified backup destination %q... ", bkpDest)
 		_, err := os.Stat(bkpDest)
 		if err != nil {
-			PlainLn("")
+			style.PlainLn("")
 			if perr, ok := err.(*os.PathError); ok { // this wrapper code allows to parse the error and enquote file path
 				return nil, fmt.Errorf("%q: %v", perr.Path, perr.Err)
 			}
 			return nil, fmt.Errorf("accessing backup destination: %w", err)
 		}
-		Ok("")
+		style.Ok("")
 		app.bkpDest = bkpDest
 	}
 
@@ -218,7 +219,7 @@ func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive bool) 
 			return nil, fmt.Errorf("%q is not provided, but it is required when %q is specified", "-bkp-dest", "-config")
 		}
 		// Case: Both Config File and Backup Destination explicitly specified by user
-		Plain("Reading specified config file %q... ", configFile)
+		style.Plain("Reading specified config file %q... ", configFile)
 		if err := app.loadConfig(configFile); err != nil {
 			return nil, err
 		}
@@ -228,28 +229,28 @@ func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive bool) 
 	// (this means that Config File is NOT specified ether)
 	if app.bkpDest == "" {
 		// Get available drives and mount points
-		InfoLite("%q is not specified.", "-bkp-dest")
-		Plain("Retrieving available drives and common mount points... ")
+		style.InfoLite("%q is not specified.", "-bkp-dest")
+		style.Plain("Retrieving available drives and common mount points... ")
 		drives, err := getAvailableDrives()
 		if err != nil {
-			PlainLn("")
+			style.PlainLn("")
 			return nil, fmt.Errorf("getting available drives: %w", err)
 		}
-		Ok("")
+		style.Ok("")
 
 		// Print found destinations
 		for _, drive := range drives {
-			Sub("  %s", drive)
+			style.Sub("  %s", drive)
 		}
 
 		// Search for the first destination with default backup config file in it's root
-		Plain("Searching for %q file in the root of available drives and mount points... ", ConfigFileDefault)
+		style.Plain("Searching for %q file in the root of available drives and mount points... ", ConfigFileDefault)
 		for _, drive := range drives {
 			configFile := filepath.Join(drive, ConfigFileDefault)
 			if _, err := os.Stat(configFile); err == nil {
 				// Found a backup destination candidate
-				Ok("")
-				Plain("Reading config file %q... ", configFile)
+				style.Ok("")
+				style.Plain("Reading config file %q... ", configFile)
 				if err := app.loadConfig(configFile); err != nil {
 					return nil, err
 				}
@@ -259,7 +260,7 @@ func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive bool) 
 		}
 
 		if app.bkpDest == "" {
-			PlainLn("")
+			style.PlainLn("")
 			return nil, fmt.Errorf("no backup destination found. Place '.smbkp.yaml' in the root of the destination drive or use the -bkp-dest flag")
 		}
 	}
@@ -267,8 +268,8 @@ func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive bool) 
 	// Case: Backup Destination is explicitly specified by user, but Config File is NOT
 	if app.configFile == "" {
 		configFile := filepath.Join(app.bkpDest, ConfigFileDefault)
-		InfoLite("%q is not specified. Assuming default config file in the root of backup destination.", "-config")
-		Plain("Reading assumed config file %q... ", configFile)
+		style.InfoLite("%q is not specified. Assuming default config file in the root of backup destination.", "-config")
+		style.Plain("Reading assumed config file %q... ", configFile)
 		if err := app.loadConfig(configFile); err != nil {
 			return nil, err
 		}
@@ -305,20 +306,20 @@ func (app *BackupApp) loadConfig(configFile string) error {
 	data, err := os.ReadFile(configFile)
 
 	if err != nil {
-		PlainLn("")
+		style.PlainLn("")
 		if perr, ok := err.(*os.PathError); ok { // this wrapper code allows to parse the error and enquote file path
 			return fmt.Errorf("%q: %v", perr.Path, perr.Err)
 		}
 		return fmt.Errorf("reading config file: %w", err)
 	}
-	Ok("")
+	style.Ok("")
 
 	if err := yaml.Unmarshal(data, &app.BkpConfig); err != nil {
 		return fmt.Errorf("parsing config file: %w", err)
 	}
 
 	if err := app.BkpConfig.validate(); err != nil {
-		PlainLn("")
+		style.PlainLn("")
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
@@ -332,7 +333,7 @@ func (c *Config) validate() error {
 	// Validate backups_to_keep
 	if c.Retention.BackupsToKeep < LimitMinBackupsToKeep {
 		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.", "backups_to_keep", c.Retention.BackupsToKeep, LimitMinBackupsToKeep)
-		WarnLite(msg)
+		style.WarnLite(msg)
 		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
 	}
 
@@ -354,7 +355,7 @@ func (c *Config) validate() error {
 
 	if minFreeSpaceParsed < LimitMinFreeSpaceParsed {
 		msg := fmt.Sprintf("%q value increased from '%s' to '%s', which is allowed minimum.", "min_free_space", c.Retention.MinFreeSpace, LimitMinFreeSpace)
-		WarnLite(msg)
+		style.WarnLite(msg)
 		c.Retention.MinFreeSpace = LimitMinFreeSpace
 		c.Retention.minFreeSpaceParsed = LimitMinFreeSpaceParsed
 	}
@@ -376,64 +377,64 @@ func (c *Config) validate() error {
 // REVIEW BACKUP CONFIGURATION BEFORE PROCEEDING
 func reviewBackupConfig(app *BackupApp) error {
 	fmt.Println()
-	Signature("========  Backup Configuration Review  ========")
-	PlainLn("Config file: %s", app.configFile)
-	Plain("Backup destination: ")
-	Signature(app.bkpDestFullPath)
+    style.Signature("========  Backup Configuration Review  ========")
+    style.PlainLn("Config file: %s", app.configFile)
+	style.Plain("Backup destination: ")
+	style.Signature(app.bkpDestFullPath)
 
 
 	// Validate min_free_space
-	PlainLn("Minimum required free space: %s ", app.BkpConfig.Retention.MinFreeSpace)
+	style.PlainLn("Minimum required free space: %s ", app.BkpConfig.Retention.MinFreeSpace)
 
 	availableFreeSpace, availableFreeSpaceFormatted, err := getFreeSpace(app.bkpDest)
 	if err != nil {
 		return fmt.Errorf("reading free space: %w", err)
 	}
 
-	PlainLn("Available free space: %s", availableFreeSpaceFormatted) // Check space on the root of the backup destination
+	style.PlainLn("Available free space: %s", availableFreeSpaceFormatted) // Check space on the root of the backup destination
 
 	if availableFreeSpace < app.BkpConfig.Retention.minFreeSpaceParsed {
 		return fmt.Errorf("available free space (%s) is less than required minimum (%s)", availableFreeSpaceFormatted, app.BkpConfig.Retention.MinFreeSpace)
 	}
 
-	PlainLn("Backups to keep: %d", app.BkpConfig.Retention.BackupsToKeep)
-	PlainLn("Non-interactive: %t", app.nonInteractive)
-	PlainLn("Exit on error: %t", app.exitOnError)
+	style.PlainLn("Backups to keep: %d", app.BkpConfig.Retention.BackupsToKeep)
+    style.PlainLn("Non-interactive: %t", app.nonInteractive)
+	style.PlainLn("Exit on error: %t", app.exitOnError)
 	fmt.Println()
 
 	// Validate bkp_items
-	PlainLn("Items to backup: %d", len(app.BkpConfig.BkpItems))
+	style.PlainLn("Items to backup: %d", len(app.BkpConfig.BkpItems))
 	if len(app.BkpConfig.BkpItems) == 0 {
-		Warn("No items listed under 'bkp_items' in the config file, nothing to backup. Exiting.")
+		style.Warn("No items listed under 'bkp_items' in the config file, nothing to backup. Exiting.")
 		fmt.Println()
 		os.Exit(0)
 	}
 
-	for i, item := range app.BkpConfig.BkpItems {
-		PlainLn("\n  [%d] Source: %s", i+1, item.Source)
-		PlainLn("      Destination: %s", item.Destination)
-		if len(item.Include) > 0 {
-			PlainLn("      Include: %v", strings.Join(item.Include, ", "))
-		}
-		if len(item.Exclude) > 0 {
-			PlainLn("      Exclude: %v", strings.Join(item.Exclude, ", "))
-		}
-	}
+    for i, item := range app.BkpConfig.BkpItems {
+        style.PlainLn("\n  [%d] Source: %s", i+1, item.Source)
+        style.PlainLn("      Destination: %s", item.Destination)
+        if len(item.Include) > 0 {
+            style.PlainLn("      Include: %v", strings.Join(item.Include, ", "))
+        }
+        if len(item.Exclude) > 0 {
+            style.PlainLn("      Exclude: %v", strings.Join(item.Exclude, ", "))
+        }
+    }
 
-	if app.nonInteractive {
-		return nil
-	}
+    if app.nonInteractive {
+        return nil
+    }
 
-	Prompt("Proceed with backup? (only \"yes\" will be accepted)")
-	var response string
-	fmt.Scanln(&response)
+    style.Prompt("Proceed with backup? (only \"yes\" will be accepted)")
+    var response string
+    fmt.Scanln(&response)
 	fmt.Println()
-	response = strings.TrimSpace(strings.ToLower(response))
-	if response != "yes" {
-		WarnLite("Backup cancelled by user.")
+    response = strings.TrimSpace(strings.ToLower(response))
+    if response != "yes" {
+        style.WarnLite("Backup cancelled by user.")
 		fmt.Println()
-		os.Exit(0)
-	}
+        os.Exit(0)
+    }
 	return nil
 }
 
@@ -447,29 +448,29 @@ func (app *BackupApp) runBackup() error {
 	timestamp := startTime.Format("20060102-150405")
 	// log.Println("[INFO] Backup process started.") //DELETE @PS tryout
 
-	Signature("Backup stated on: %s", startTime.Format(time.RFC822))
+	style.Signature("Backup stated on: %s", startTime.Format(time.RFC822))
 
 	// Create backup directory
 	app.bkpDestFullPath = filepath.Join(app.bkpDestFullPath, fmt.Sprintf("%s-%s", Prefix, timestamp))
-	Plain("Creating backup directory %q... ", app.bkpDestFullPath)
+	style.Plain("Creating backup directory %q... ", app.bkpDestFullPath)
 	if err := os.MkdirAll(app.bkpDestFullPath, 0755); err != nil {
-		PlainLn("")
+		style.PlainLn("")
 		return fmt.Errorf("creating backup directory: %w", err)
 	}
-	Ok("")
+	style.Ok("")
 
 	// Copy backup items
 	var results []BackupResult
 	var failedCount int
 
 	for i, item := range app.BkpConfig.BkpItems {
-		PlainLn("\n[%d/%d] Backing up: %s", i+1, len(app.BkpConfig.BkpItems), item.Source)
+		style.PlainLn("\n[%d/%d] Backing up: %s", i+1, len(app.BkpConfig.BkpItems), item.Source)
 
-			totalItems, err := app.countTotalItems(item)
-			if err != nil {
-				Err("Failed to count items for backup: %v", err)
-				continue
-			}
+		totalItems, err := app.countTotalItems(item)
+		if err != nil {
+			style.Err("Failed to count items for backup: %v", err)
+			continue
+		}
 
 		var processedItems int
 		lastUpdate := -1
@@ -486,7 +487,7 @@ func (app *BackupApp) runBackup() error {
 						remaining = 0
 					}
 					progressBar := strings.Repeat("■", completed) + strings.Repeat(".", remaining)
-					Plain("\r[%s]", progressBar)
+					style.Plain("\r[%s]", progressBar)
 					lastUpdate = percentage
 				}
 			}
@@ -508,9 +509,9 @@ func (app *BackupApp) runBackup() error {
 		if err != nil {
 			failedCount++
 			if errors.Is(err, os.ErrNotExist) {
-				PlainLn("\n❌ %v", err)
+				style.PlainLn("\n❌ %v", err)
 			} else {
-				PlainLn("\n❌ (%v): %v", elapsed, err)
+				style.PlainLn("\n❌ (%v): %v", elapsed, err)
 			}
 
 			if app.exitOnError {
@@ -529,37 +530,37 @@ func (app *BackupApp) runBackup() error {
 		} else {
 			progressBarLength := 50
 			progressBar := strings.Repeat("■", progressBarLength)
-			Plain("\r[%s] ", progressBar)
-			Ok(" (%s)", result.Elapsed)
+			style.Plain("\r[%s] ", progressBar)
+			style.Ok(" (%s)", result.Elapsed)
 		}
 	}
 
 	// Cleanup old backups
 	if err := app.cleanupOldBackups(); err != nil {
-		Warn("Failed to cleanup old backups: %v\n", err)
+		style.Warn("Failed to cleanup old backups: %v\n", err)
 	}
 
 	totalElapsed := time.Since(startTime)
 
 	// Print summary
-	PlainLn("")
-	Signature("==============  Backup  Summary  ==============")
-	PlainLn("Backup destination: %v", app.bkpDestFullPath)
-	PlainLn("Total time: %v", totalElapsed)
-	PlainLn("Total items: %d", len(results))
-	PlainLn("Successful: %d", len(results)-failedCount)
-	PlainLn("Failed: %d", failedCount)
+	style.PlainLn("")
+	style.Signature("==============  Backup  Summary  ==============")
+	style.PlainLn("Backup destination: %v", app.bkpDestFullPath)
+	style.PlainLn("Total time: %v", totalElapsed)
+	style.PlainLn("Total items: %d", len(results))
+	style.PlainLn("Successful: %d", len(results)-failedCount)
+	style.PlainLn("Failed: %d", failedCount)
 
-	PlainLn("")
-	Signature("Detailed Results")
+	style.PlainLn("")
+	style.Signature("Detailed Results")
 	for i, result := range results {
 		status := "✅"
 		if !result.Success {
 			status = "❌"
 		}
-		PlainLn("[%d] %s %s (%v)", i+1, status, result.Item.Source, result.Elapsed)
+		style.PlainLn("[%d] %s %s (%v)", i+1, status, result.Item.Source, result.Elapsed)
 		if result.Error != nil {
-			Err("%v", result.Error)
+			style.Err("%v", result.Error)
 		}
 	}
 
@@ -567,9 +568,9 @@ func (app *BackupApp) runBackup() error {
 		return fmt.Errorf("backup completed with %d failures", failedCount)
 	}
 
-	PlainLn("")
-	Success("Backup completed successfully!")
-	PlainLn("")
+	style.PlainLn("")
+	style.Success("Backup completed successfully!")
+	style.PlainLn("")
 	return nil
 }
 
@@ -794,13 +795,13 @@ func (app *BackupApp) cleanupOldBackups() error {
 	toDelete := len(backupDirs) - int(app.BkpConfig.Retention.BackupsToKeep)
 
 	if toDelete > 0 {
-		PlainLn("")
-		Signature("Cleanup")
+		style.PlainLn("")
+		style.Signature("Cleanup")
 	}
 
 	for i := 0; i < toDelete; i++ {
 		dirPath := filepath.Join(backupRoot, backupDirs[i].Name())
-		Sub("removing old backup: %s", dirPath)
+		style.Sub("removing old backup: %s", dirPath)
 		if err := os.RemoveAll(dirPath); err != nil {
 			return fmt.Errorf("removing old backup %s: %w", dirPath, err)
 		}
