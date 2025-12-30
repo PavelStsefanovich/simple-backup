@@ -73,7 +73,6 @@ type BackupApp struct {
 	bkpDest         string
 	bkpDestFullPath	string
 	exitOnError     bool
-	// logDir		string //TODO To be implemented
 	nonInteractive  bool
 }
 
@@ -115,12 +114,12 @@ func main() {
 
 		logObj := log.New(logFile, "", log.LstdFlags)
 		st := style.New(logObj)
-		st.Info("Logging initialized.", style.Log(), style.Bold())
+		st.Info("Logging initialized.", style.Log())
 
 	} else {
 		logObj := log.New(io.Discard, "", log.LstdFlags)
 		st := style.New(logObj)
-		st.Info("Log directory not specified, writing to console only.")
+		st.Warn("Log directory not specified, writing to console only.")
 	}
 
 	// Show help

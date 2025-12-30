@@ -24,9 +24,9 @@ func New(logger *log.Logger) *Style {
 // ---- Options ----
 
 type options struct {
-	bold  bool
-	log   bool
-	label bool
+	bold    bool
+	log     bool
+	noLabel bool
 }
 
 // Option configures how a Style method behaves.
@@ -42,10 +42,15 @@ func Log() Option {
 	return func(o *options) { o.log = true }
 }
 
-// Label causes the appropriate label (e.g. [INFO]) to be prepended for
-// Info/Warn/Err/Ok methods.
+// Label ensures that, when a default label is defined for the method, it will be shown.
+// Labels are now printed by default for labeled methods, so this is mainly for clarity.
 func Label() Option {
-	return func(o *options) { o.label = true }
+	return func(o *options) { o.noLabel = false }
+}
+
+// NoLabel suppresses the default label (e.g. [INFO]) for Info/Warn/Err/Ok methods.
+func NoLabel() Option {
+	return func(o *options) { o.noLabel = true }
 }
 
 // ---- ANSI helpers ----
@@ -77,7 +82,7 @@ func (s *Style) print(msg, color, defaultLabel string, opts ...Option) {
 	}
 
 	text := msg
-	if defaultLabel != "" && cfg.label {
+	if defaultLabel != "" && !cfg.noLabel {
 		text = defaultLabel + " " + text
 	}
 
@@ -115,26 +120,26 @@ func (s *Style) Sub(msg string, opts ...Option) {
 	s.print(msg, ansiSubGray, "", opts...)
 }
 
-// Info prints an info message in FgCyan, optionally bold, optionally with "[INFO]",
-// and optionally logged.
+// Info prints an info message in FgCyan, optionally bold, with "[INFO]" by default
+// (suppressed if NoLabel is passed), and optionally logged.
 func (s *Style) Info(msg string, opts ...Option) {
 	s.print(msg, ansiFgCyan, "[INFO]", opts...)
 }
 
-// Warn prints a warning message in FgYellow, optionally bold, optionally with "[WARN]",
-// and optionally logged.
+// Warn prints a warning message in FgYellow, optionally bold, with "[WARN]" by default
+// (suppressed if NoLabel is passed), and optionally logged.
 func (s *Style) Warn(msg string, opts ...Option) {
 	s.print(msg, ansiFgYellow, "[WARN]", opts...)
 }
 
-// Err prints an error message in FgRed, optionally bold, optionally with "[ERR!]",
-// and optionally logged.
+// Err prints an error message in FgRed, optionally bold, with "[ERR!]" by default
+// (suppressed if NoLabel is passed), and optionally logged.
 func (s *Style) Err(msg string, opts ...Option) {
 	s.print(msg, ansiFgRed, "[ERR!]", opts...)
 }
 
-// Ok prints a success message in FgGreen, optionally bold, optionally with "[OK]",
-// and optionally logged.
+// Ok prints a success message in FgGreen, optionally bold, with "[OK]" by default
+// (suppressed if NoLabel is passed), and optionally logged.
 func (s *Style) Ok(msg string, opts ...Option) {
 	s.print(msg, ansiFgGreen, "[OK]", opts...)
 }
