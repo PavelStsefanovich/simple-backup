@@ -66,8 +66,8 @@ const (
 	ansiFgGreen  = "\x1b[32m"
 
 	// 24‑bit RGB
-	ansiSubGray = "\x1b[38;2;150;150;150m"
-	ansiSign    = "\x1b[38;2;242;103;18m"
+	ansiSubGray   = "\x1b[38;2;150;150;150m"
+	ansiSignature = "\x1b[38;2;242;103;18m"
 )
 
 // core printing helper; NEVER appends newline.
@@ -144,8 +144,8 @@ func (s *Style) Ok(msg string, opts ...Option) {
 	s.print(msg, ansiFgGreen, "[OK]", opts...)
 }
 
-// Sign prints a signature message in RGB(242,103,18), optionally bold, optionally logged.
+// Signature prints a signature message in RGB(242,103,18), optionally bold, optionally logged.
 // No label.
-func (s *Style) Sign(msg string, opts ...Option) {
-	s.print(msg, ansiSign, "", opts...)
+func (s *Style) Signature(msg string, opts ...Option) {
+	s.print(msg, ansiSignature, "", opts...)
 }
