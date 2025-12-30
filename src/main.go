@@ -96,6 +96,18 @@ func main() {
 	)
 	pflag.Parse()
 
+		// Show help
+	if *showHelp {
+		printHelp()
+		return
+	}
+
+	// Show version
+	if *showVersion {
+		printVersion()
+		return
+	}
+
 	// Set up logging
 	if *logDir != "" {
 		logStartTime := time.Now()
@@ -122,18 +134,6 @@ func main() {
 		logObj := log.New(io.Discard, "", log.LstdFlags)
 		logger = style.New(logObj)
 		logger.Warn("Log directory not specified, writing to console only.")
-	}
-
-	// Show help
-	if *showHelp {
-		printHelp()
-		return
-	}
-
-	// Show version
-	if *showVersion {
-		printVersion()
-		return
 	}
 
 	// (debug) Show Backup App object
@@ -164,26 +164,21 @@ func main() {
 
 // PRINT HELP
 func printHelp() {
-	fmt.Println()
-	logger.Signature("===============  Simple Backup  ===============")
-	fmt.Println()
-	logger.Plain("Usage:")
+	fmt.Println("\n===============  Simple Backup  ===============")
+	fmt.Println("\nUsage:")
 	fmt.Println("  smbkp [options]")
-	fmt.Println()
-	fmt.Println("Options:")
+	fmt.Println("\nOptions:")
 	pflag.PrintDefaults()
-	fmt.Println()
-	logger.Sub("If -bkp-dest is not provided, the app will search for the first drive/mount")
-	logger.Sub("that contains '" + ConfigFileDefault + "' file in its root directory.")
-	fmt.Println()
+	fmt.Println("\nNote: If -bkp-dest is not specified, the app will search for any drives/mounts")
+	fmt.Printf("      that contain '%s' file in their root directory.\n", ConfigFileDefault)
+	fmt.Println("      First drive matching this criteria will be selected.")
 }
 
 
 // PRINT VERSION
 func printVersion() {
-	logger.Signature("Simple Backup")
-	logger.Plain(fmt.Sprintf("v%s", Version))
-	fmt.Println()
+	fmt.Println("\nSimple Backup")
+	fmt.Printf("v%s\n", Version)
 }
 
 
