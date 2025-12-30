@@ -1,106 +1,146 @@
 package style
 
 import (
-    "fmt"
-    "github.com/fatih/color"
+	"fmt"
+	"log"
+	"os"
 )
 
-var (
-    _signature  = color.RGB(242, 103, 18).SprintFunc()
-    _plain      = color.New().SprintFunc()
-    _bold       = color.New(color.Bold).SprintFunc()
-    _subMsg     = color.RGB(150, 150, 150).SprintFunc()
-    _info       = color.New(color.FgCyan).SprintFunc()
-    _warn       = color.New(color.FgYellow, color.Bold).SprintFunc()
-    _warnMsg    = color.New(color.FgYellow).SprintFunc()
-    _error      = color.New(color.FgRed, color.Bold).SprintFunc()
-    _errorMsg   = color.New(color.FgRed).SprintFunc()
-    _success    = color.New(color.FgGreen, color.Bold).SprintFunc()
-    _okMsg      = color.New(color.FgGreen).SprintFunc()
+// Style controls how log messages are printed to the screen and optionally to a log file.
+type Style struct {
+	out    *os.File
+	logger *log.Logger
+}
+
+// New creates a new Style that prints to stdout and uses the provided log.Logger
+// for optional log-file output.
+func New(logger *log.Logger) *Style {
+	return &Style{
+		out:    os.Stdout,
+		logger: logger,
+	}
+}
+
+// ---- Options ----
+
+type options struct {
+	bold  bool
+	log   bool
+	label bool
+}
+
+// Option configures how a Style method behaves.
+type Option func(*options)
+
+// Bold makes the message bold on the screen.
+func Bold() Option {
+	return func(o *options) { o.bold = true }
+}
+
+// Log makes the message also be written to the log file (via the logger).
+func Log() Option {
+	return func(o *options) { o.log = true }
+}
+
+// Label causes the appropriate label (e.g. [INFO]) to be prepended for
+// Info/Warn/Err/Ok methods.
+func Label() Option {
+	return func(o *options) { o.label = true }
+}
+
+// ---- ANSI helpers ----
+
+const (
+	ansiReset = "\x1b[0m"
+	ansiBold  = "\x1b[1m"
+
+	// 8-color ANSI
+	ansiFgCyan   = "\x1b[36m"
+	ansiFgYellow = "\x1b[33m"
+	ansiFgRed    = "\x1b[31m"
+	ansiFgGreen  = "\x1b[32m"
+
+	// 24‑bit RGB
+	ansiSubGray = "\x1b[38;2;150;150;150m"
+	ansiSign    = "\x1b[38;2;242;103;18m"
 )
 
-// Print message in app signature color
-func Signature(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_signature(msg))
+// core printing helper; NEVER appends newline.
+func (s *Style) print(msg, color, defaultLabel string, opts ...Option) {
+	if s == nil {
+		return
+	}
+
+	cfg := options{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	text := msg
+	if defaultLabel != "" && cfg.label {
+		text = defaultLabel + " " + text
+	}
+
+	prefix := ""
+	suffix := ""
+
+	if color != "" {
+		prefix += color
+		suffix = ansiReset
+	}
+	if cfg.bold {
+		prefix = ansiBold + prefix
+		if suffix == "" {
+			suffix = ansiReset
+		}
+	}
+
+	// Print to screen, no automatic newline.
+	fmt.Fprint(s.out, prefix+text+suffix)
+
+	// Optionally write to log file via logger (plain text, no ANSI codes).
+	if cfg.log && s.logger != nil {
+		s.logger.Print(text)
+	}
 }
 
-// Print message without styling and without new line
-func Plain(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Print(_plain(msg))
+// Plain prints a simple message, optionally bold, optionally logged.
+// No color, no label.
+func (s *Style) Plain(msg string, opts ...Option) {
+	s.print(msg, "", "", opts...)
 }
 
-// Print message without styling
-func PlainLn(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_plain(msg))
+// Sub prints a "sub" message in RGB(150,150,150), optionally bold, optionally logged.
+func (s *Style) Sub(msg string, opts ...Option) {
+	s.print(msg, ansiSubGray, "", opts...)
 }
 
-// Pring message in bold
-func Bold(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_bold(msg))
+// Info prints an info message in FgCyan, optionally bold, optionally with "[INFO]",
+// and optionally logged.
+func (s *Style) Info(msg string, opts ...Option) {
+	s.print(msg, ansiFgCyan, "[INFO]", opts...)
 }
 
-// Print message in soft gray
-func Sub(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_subMsg(msg))
+// Warn prints a warning message in FgYellow, optionally bold, optionally with "[WARN]",
+// and optionally logged.
+func (s *Style) Warn(msg string, opts ...Option) {
+	s.print(msg, ansiFgYellow, "[WARN]", opts...)
 }
 
-// Print user prompt message
-func Prompt(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println()
-    fmt.Print(_info(msg))
-    fmt.Print(_info(":\n  "))
+// Err prints an error message in FgRed, optionally bold, optionally with "[ERR!]",
+// and optionally logged.
+func (s *Style) Err(msg string, opts ...Option) {
+	s.print(msg, ansiFgRed, "[ERR!]", opts...)
 }
 
-// Print info message with partial styling
-func InfoLite(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_info("[INFO]"), msg)
+// Ok prints a success message in FgGreen, optionally bold, optionally with "[OK]",
+// and optionally logged.
+func (s *Style) Ok(msg string, opts ...Option) {
+	s.print(msg, ansiFgGreen, "[OK]", opts...)
 }
 
-// Print info message with full styling
-func Info(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_info("[INFO]"), _info(msg))
-}
-
-// Print warning message with partial styling
-func WarnLite(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_warn("[WARN]"), msg)
-}
-
-// Print warning message with full styling
-func Warn(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_warn("[WARN]"), _warnMsg(msg))
-}
-
-// Print error message with partial styling
-func ErrLite(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_error("[ERROR]"), msg)
-}
-
-// Print error message with full styling
-func Err(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_error("[ERROR]"), _errorMsg(msg))
-}
-
-// Print success message with partial styling
-func Ok(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_okMsg("[OK]"), msg)
-}
-
-// Print success message with full styling
-func Success(format string, a ...any) {
-    msg := fmt.Sprintf(format, a...)
-    fmt.Println(_success("[SUCCESS]"), _okMsg(msg))
+// Sign prints a signature message in RGB(242,103,18), optionally bold, optionally logged.
+// No label.
+func (s *Style) Sign(msg string, opts ...Option) {
+	s.print(msg, ansiSign, "", opts...)
 }
