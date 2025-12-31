@@ -1,8 +1,8 @@
 package main
 
 import (
-	// "bufio"
-	// "errors"
+	"bufio"
+	"errors"
 	"fmt"
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v3"
@@ -155,16 +155,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	// // Run backup
-	// if err := app.runBackup(); err != nil {
-	// 	logger.Err(fmt.Sprintf("Backup failed: %v\n", err))
-	// }
+	// Run backup
+	if err := app.runBackup(); err != nil {
+		logger.Err(fmt.Sprintf("Backup failed: %v\n", err))
+	}
 }
 
 
 // PRINT HELP
 func printHelp() {
-	fmt.Println("\n===============  Simple Backup  ===============")
+	fmt.Println("\n================  Simple Backup  ================")
 	fmt.Println("\nUsage:")
 	fmt.Println("  smbkp [options]")
 	fmt.Println("\nOptions:")
@@ -371,10 +371,10 @@ func (c *Config) validate() error {
 
 // REVIEW BACKUP CONFIGURATION BEFORE PROCEEDING
 func reviewBackupConfig(app *BackupApp) error {
-    logger.Signature("\n========  Backup Configuration Review  ========\n")
+    logger.Signature("\n=========  Backup Configuration Review  =========\n")
     logger.Plain(fmt.Sprintf("Config file: %s\n", app.configFile))
 	logger.Plain("Backup destination: ")
-	logger.Signature(fmt.Sprintf("%s\n", app.bkpDestFullPath))
+	logger.Info(fmt.Sprintf("%s\n", app.bkpDestFullPath), style.NoLabel())
 
 
 	// Validate min_free_space
@@ -434,372 +434,369 @@ func reviewBackupConfig(app *BackupApp) error {
 
 
 
-// //////////////  BACKUP FUNCTIONS  /////////////////////////////////////////////
+//////////////  BACKUP FUNCTIONS  /////////////////////////////////////////////
 
-// // EXECUTE BACKUP
-// func (app *BackupApp) runBackup() error {
-// 	startTime := time.Now()
-// 	timestamp := startTime.Format("20060102-150405")
-// 	// log.Println("[INFO] Backup process started.") //DELETE @PS tryout
+// EXECUTE BACKUP
+func (app *BackupApp) runBackup() error {
+	startTime := time.Now()
+	timestamp := startTime.Format("20060102-150405")
 
-// 	logger.Signature("Backup stated on: %s", startTime.Format(time.RFC822))
+	logger.Signature(fmt.Sprintf("\n====  Backup started on: %s  ===\n", startTime.Format(time.RFC822)))
 
-// 	// Create backup directory
-// 	app.bkpDestFullPath = filepath.Join(app.bkpDestFullPath, fmt.Sprintf("%s-%s", Prefix, timestamp))
-// 	logger.Plain("Creating backup directory %q... ", app.bkpDestFullPath)
-// 	if err := os.MkdirAll(app.bkpDestFullPath, 0755); err != nil {
-// 		logger.Plain("\n")
-// 		return fmt.Errorf("creating backup directory: %w", err)
-// 	}
-// 	logger.Ok("\n")
+	// Create backup directory
+	app.bkpDestFullPath = filepath.Join(app.bkpDestFullPath, fmt.Sprintf("%s-%s", Prefix, timestamp))
+	logger.Plain(fmt.Sprintf("Creating backup directory %q... ", app.bkpDestFullPath))
+	if err := os.MkdirAll(app.bkpDestFullPath, 0755); err != nil {
+		logger.Plain("\n")
+		return fmt.Errorf("creating backup directory: %w", err)
+	}
+	logger.Ok("\n")
 
-// 	// Copy backup items
-// 	var results []BackupResult
-// 	var failedCount int
+	// Copy backup items
+	var results []BackupResult
+	var failedCount int
 
-// 	for i, item := range app.BkpConfig.BkpItems {
-// 		logger.PlainLn("\n[%d/%d] Backing up: %s", i+1, len(app.BkpConfig.BkpItems), item.Source)
+	for i, item := range app.BkpConfig.BkpItems {
+		logger.Plain(fmt.Sprintf("\n[%d/%d] Backing up: %s\n", i+1, len(app.BkpConfig.BkpItems), item.Source))
 
-// 		totalItems, err := app.countTotalItems(item)
-// 		if err != nil {
-// 			logger.Err("Failed to count items for backup: %v", err)
-// 			continue
-// 		}
+		totalItems, err := app.countTotalItems(item)
+		if err != nil {
+			logger.Err(fmt.Sprintf("Failed to count items for backup: %v\n", err))
+			continue
+		}
 
-// 		var processedItems int
-// 		lastUpdate := -1
+		var processedItems int
+		lastUpdate := -1
 
-// 		progressCb := func() {
-// 			processedItems++
-// 			if totalItems > 0 {
-// 				percentage := int(float64(processedItems) * 100 / float64(totalItems))
-// 				if percentage > lastUpdate {
-// 					progressBarLength := 50
-// 					completed := int(float64(percentage) / 100.0 * float64(progressBarLength))
-// 					remaining := progressBarLength - completed
-// 					if remaining < 0 {
-// 						remaining = 0
-// 					}
-// 					progressBar := strings.Repeat("■", completed) + strings.Repeat(".", remaining)
-// 					logger.Plain("\r[%s]", progressBar)
-// 					lastUpdate = percentage
-// 				}
-// 			}
-// 		}
+		progressCb := func() {
+			processedItems++
+			if totalItems > 0 {
+				percentage := int(float64(processedItems) * 100 / float64(totalItems))
+				if percentage > lastUpdate {
+					progressBarLength := 50
+					completed := int(float64(percentage) / 100.0 * float64(progressBarLength))
+					remaining := progressBarLength - completed
+					if remaining < 0 {
+						remaining = 0
+					}
+					progressBar := strings.Repeat("■", completed) + strings.Repeat(".", remaining)
+					logger.Plain(fmt.Sprintf("\r[%s]", progressBar))
+					lastUpdate = percentage
+				}
+			}
+		}
 
-// 		itemStart := time.Now()
+		itemStart := time.Now()
 
-// 		err = app.backupItem(item, progressCb)
-// 		elapsed := time.Since(itemStart)
+		err = app.backupItem(item, progressCb)
+		elapsed := time.Since(itemStart)
 
-// 		result := BackupResult{
-// 			Item:    item,
-// 			Success: err == nil,
-// 			Error:   err,
-// 			Elapsed: elapsed,
-// 		}
-// 		results = append(results, result)
+		result := BackupResult{
+			Item:    item,
+			Success: err == nil,
+			Error:   err,
+			Elapsed: elapsed,
+		}
+		results = append(results, result)
 
-// 		if err != nil {
-// 			failedCount++
-// 			if errors.Is(err, os.ErrNotExist) {
-// 				logger.PlainLn("\n❌ %v", err)
-// 			} else {
-// 				logger.PlainLn("\n❌ (%v): %v", elapsed, err)
-// 			}
+		if err != nil {
+			failedCount++
+			if errors.Is(err, os.ErrNotExist) {
+				logger.Plain(fmt.Sprintf("\n❌ %v\n", err))
+			} else {
+				logger.Plain(fmt.Sprintf("\n❌ (%v): %v\n", elapsed, err))
+			}
 
-// 			if app.exitOnError {
-// 				if !app.nonInteractive {
-// 					fmt.Print("Exit due to error? (Y/n): ")
-// 					reader := bufio.NewReader(os.Stdin)
-// 					response, _ := reader.ReadString('\n')
-// 					response = strings.TrimSpace(strings.ToLower(response))
-// 					if response != "n" && response != "no" {
-// 						return fmt.Errorf("backup stopped due to error: %w", err)
-// 					}
-// 				} else {
-// 					return fmt.Errorf("backup stopped due to error: %w", err)
-// 				}
-// 			}
-// 		} else {
-// 			progressBarLength := 50
-// 			progressBar := strings.Repeat("■", progressBarLength)
-// 			logger.Plain("\r[%s] ", progressBar)
-// 			logger.Ok(" (%s)", result.Elapsed)
-// 		}
-// 	}
+			if app.exitOnError {
+				if !app.nonInteractive {
+					logger.Warn("\n\"exitOnError\" is set to True. Exit now? (type \"no\" to continue execution)\n", style.NoLabel())
+					reader := bufio.NewReader(os.Stdin)
+					response, _ := reader.ReadString('\n')
+					response = strings.TrimSpace(strings.ToLower(response))
+					if response != "no" {
+						return fmt.Errorf("backup stopped due to error: %w", err)
+					}
+				} else {
+					return fmt.Errorf("backup stopped due to error: %w", err)
+				}
+			}
+		} else {
+			progressBarLength := 50
+			progressBar := strings.Repeat("■", progressBarLength)
+			logger.Plain(fmt.Sprintf("\r[%s] ", progressBar))
+			logger.Ok(fmt.Sprintf(" (%s)\n", result.Elapsed))
+		}
+	}
 
-// 	// Cleanup old backups
-// 	if err := app.cleanupOldBackups(); err != nil {
-// 		logger.Warn("Failed to cleanup old backups: %v\n", err)
-// 	}
+	// Cleanup old backups
+	if err := app.cleanupOldBackups(); err != nil {
+		logger.Warn(fmt.Sprintf("Failed to cleanup old backups: %v\n", err))
+	}
 
-// 	totalElapsed := time.Since(startTime)
+	totalElapsed := time.Since(startTime)
 
-// 	// Print summary
-// 	logger.Plain("\n")
-// 	logger.Signature("==============  Backup  Summary  ==============")
-// 	logger.PlainLn("Backup destination: %v", app.bkpDestFullPath)
-// 	logger.PlainLn("Total time: %v", totalElapsed)
-// 	logger.PlainLn("Total items: %d", len(results))
-// 	logger.PlainLn("Successful: %d", len(results)-failedCount)
-// 	logger.PlainLn("Failed: %d", failedCount)
+	// Print summary
+	logger.Signature("\n===============  Backup  Summary  ===============\n")
+	logger.Plain("Backup destination: ")
+	logger.Info(fmt.Sprintf("%s\n", app.bkpDestFullPath), style.NoLabel())
+	// logger.Plain(fmt.Sprintf("Backup destination: %v\n", app.bkpDestFullPath))
+	logger.Plain(fmt.Sprintf("Total time: %v\n", totalElapsed))
+	logger.Plain(fmt.Sprintf("Total items: %d\n", len(results)))
+	logger.Plain(fmt.Sprintf("Successful: %d\n", len(results)-failedCount))
+	logger.Plain(fmt.Sprintf("Failed: %d\n", failedCount))
 
-// 	logger.Plain("\n")
-// 	logger.Signature("Detailed Results")
-// 	for i, result := range results {
-// 		status := "✅"
-// 		if !result.Success {
-// 			status = "❌"
-// 		}
-// 		logger.PlainLn("[%d] %s %s (%v)", i+1, status, result.Item.Source, result.Elapsed)
-// 		if result.Error != nil {
-// 			logger.Err("%v", result.Error)
-// 		}
-// 	}
+	logger.Signature("\nDetailed Results\n")
+	for i, result := range results {
+		status := "✅"
+		if !result.Success {
+			status = "❌"
+		}
+		logger.Plain(fmt.Sprintf("[%d] %s %s (%v)\n", i+1, status, result.Item.Source, result.Elapsed))
+		if result.Error != nil {
+			logger.Err(fmt.Sprintf("%v\n", result.Error))
+		}
+	}
 
-// 	if failedCount > 0 {
-// 		return fmt.Errorf("backup completed with %d failures", failedCount)
-// 	}
+	if failedCount > 0 {
+		return fmt.Errorf("backup completed with %d failures", failedCount)
+	}
 
-// 	logger.Plain("\n")
-// 	logger.Success("Backup completed successfully!")
-// 	logger.Plain("\n")
-// 	return nil
-// }
+	logger.Plain("\n")
+	logger.Ok("BACKUP COMPLETED SUCCESSFULLY!\n\n", style.NoLabel(), style.Bold())
+	return nil
+}
 
 
-// // BACKUP EACH INDIVIDUAL ITEM
-// func (app *BackupApp) backupItem(item BackupItem, progressCb func()) error {
-// 	srcPath := item.Source
-// 	destPath := filepath.Join(app.bkpDestFullPath, item.Destination)
+// BACKUP EACH INDIVIDUAL ITEM
+func (app *BackupApp) backupItem(item BackupItem, progressCb func()) error {
+	srcPath := item.Source
+	destPath := filepath.Join(app.bkpDestFullPath, item.Destination)
 
-// 	// Check if source is a file or directory
-// 	srcInfo, err := os.Stat(srcPath)
-// 	if err != nil {
-// 		return fmt.Errorf("accessing source path: %w", err)
-// 	}
+	// Check if source is a file or directory
+	srcInfo, err := os.Stat(srcPath)
+	if err != nil {
+		return fmt.Errorf("accessing source path: %w", err)
+	}
 
-// 	if srcInfo.IsDir() {
-// 		if err := os.MkdirAll(destPath, srcInfo.Mode()); err != nil {
-// 			return fmt.Errorf("creating destination directory: %w", err)
-// 		}
-// 		return app.copyDirectory(srcPath, destPath, item.Include, item.Exclude, progressCb)
-// 	} else {
-// 		return app.copyFile(srcPath, destPath, progressCb)
-// 	}
-// }
-
-
-// // COUNT TOTAL NUMBER OF ITEMS TO BACKUP
-// func (app *BackupApp) countTotalItems(item BackupItem) (int, error) {
-// 	var totalItems int
-// 	srcInfo, err := os.Stat(item.Source)
-// 	if err != nil {
-// 		return 0, err
-// 	}
-
-// 	if !srcInfo.IsDir() {
-// 		return 1, nil // A single file
-// 	}
-
-// 	err = filepath.Walk(item.Source, func(path string, info os.FileInfo, err error) error {
-// 		if err != nil {
-// 			return err
-// 		}
-
-// 		relPath, err := filepath.Rel(item.Source, path)
-// 		if err != nil {
-// 			return err
-// 		}
-
-// 		if relPath == "." {
-// 			return nil
-// 		}
-
-// 		if !app.shouldInclude(relPath, item.Include, item.Exclude) {
-// 			if info.IsDir() {
-// 				return filepath.SkipDir
-// 			}
-// 			return nil
-// 		}
-
-// 		totalItems++
-// 		return nil
-// 	})
-
-// 	return totalItems, err
-// }
+	if srcInfo.IsDir() {
+		if err := os.MkdirAll(destPath, srcInfo.Mode()); err != nil {
+			return fmt.Errorf("creating destination directory: %w", err)
+		}
+		return app.copyDirectory(srcPath, destPath, item.Include, item.Exclude, progressCb)
+	} else {
+		return app.copyFile(srcPath, destPath, progressCb)
+	}
+}
 
 
-// // COPY DIRECTORY
-// func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string, progressCb func()) error {
-// 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-// 		if err != nil {
-// 			return err
-// 		}
+// COUNT TOTAL NUMBER OF ITEMS TO BACKUP
+func (app *BackupApp) countTotalItems(item BackupItem) (int, error) {
+	var totalItems int
+	srcInfo, err := os.Stat(item.Source)
+	if err != nil {
+		return 0, err
+	}
 
-// 		// Calculate relative path
-// 		relPath, err := filepath.Rel(src, path)
-// 		if err != nil {
-// 			return err
-// 		}
+	if !srcInfo.IsDir() {
+		return 1, nil // A single file
+	}
 
-// 		// Skip root directory
-// 		if relPath == "." {
-// 			return nil
-// 		}
+	err = filepath.Walk(item.Source, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 
-// 		// Check include/exclude patterns
-// 		if !app.shouldInclude(relPath, include, exclude) {
-// 			if info.IsDir() {
-// 				return filepath.SkipDir
-// 			}
-// 			return nil
-// 		}
+		relPath, err := filepath.Rel(item.Source, path)
+		if err != nil {
+			return err
+		}
 
-// 		destPath := filepath.Join(dest, relPath)
+		if relPath == "." {
+			return nil
+		}
 
-// 		// If it's a directory, create it
-// 		if info.IsDir() {
-// 			err := os.MkdirAll(destPath, info.Mode())
-// 			if err == nil {
-// 				progressCb()
-// 			}
-// 			return err
-// 		}
+		if !app.shouldInclude(relPath, item.Include, item.Exclude) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 
-// 		// Handle symlinks
-// 		if info.Mode()&os.ModeSymlink != 0 {
-// 			// Check what the symlink points to
-// 			stat, err := os.Stat(path) // This follows the symlink
-// 			if err != nil {
-// 				return err
-// 			}
-// 			if stat.IsDir() {
-// 				// It's a symlink to a directory. Recreate the symlink.
-// 				target, err := os.Readlink(path)
-// 				if err != nil {
-// 					return err
-// 				}
-// 				return os.Symlink(target, destPath)
-// 			}
-// 			// It's a symlink to a file, fall through to copyFile
-// 		}
+		totalItems++
+		return nil
+	})
 
-// 		// It's a regular file or a symlink to a file
-// 		return app.copyFile(path, destPath, progressCb)
-// 	})
-// }
+	return totalItems, err
+}
 
 
-// // COPY FILE
-// func (app *BackupApp) copyFile(src, dest string, progressCb func()) error {
-// 	// Ensure destination directory exists
-// 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
-// 		return err
-// 	}
+// COPY DIRECTORY
+func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string, progressCb func()) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 
-// 	srcFile, err := os.Open(src)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer srcFile.Close()
+		// Calculate relative path
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
 
-// 	destFile, err := os.Create(dest)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer destFile.Close()
+		// Skip root directory
+		if relPath == "." {
+			return nil
+		}
 
-// 	_, err = destFile.ReadFrom(srcFile)
-// 	if err != nil {
-// 		return err
-// 	}
+		// Check include/exclude patterns
+		if !app.shouldInclude(relPath, include, exclude) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 
-// 	progressCb()
+		destPath := filepath.Join(dest, relPath)
 
-// 	// Copy file permissions
-// 	srcInfo, err := srcFile.Stat()
-// 	if err != nil {
-// 		return err
-// 	}
+		// If it's a directory, create it
+		if info.IsDir() {
+			err := os.MkdirAll(destPath, info.Mode())
+			if err == nil {
+				progressCb()
+			}
+			return err
+		}
 
-// 	return os.Chmod(dest, srcInfo.Mode())
-// }
+		// Handle symlinks
+		if info.Mode()&os.ModeSymlink != 0 {
+			// Check what the symlink points to
+			stat, err := os.Stat(path) // This follows the symlink
+			if err != nil {
+				return err
+			}
+			if stat.IsDir() {
+				// It's a symlink to a directory. Recreate the symlink.
+				target, err := os.Readlink(path)
+				if err != nil {
+					return err
+				}
+				return os.Symlink(target, destPath)
+			}
+			// It's a symlink to a file, fall through to copyFile
+		}
 
-
-// // EVALUATE INCLUDE/EXCLUDE PATTERNS
-// func (app *BackupApp) shouldInclude(path string, include, exclude []string) bool {
-// 	// If there are include patterns, check if path matches any
-// 	if len(include) > 0 {
-// 		included := false
-// 		for _, pattern := range include {
-// 			if matched, _ := filepath.Match(pattern, path); matched {
-// 				included = true
-// 				break
-// 			}
-// 			// Also check if it's a subdirectory of an included directory
-// 			if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
-// 				included = true
-// 				break
-// 			}
-// 		}
-// 		if !included {
-// 			return false
-// 		}
-// 	}
-
-// 	// Check exclude patterns (exclude takes priority)
-// 	for _, pattern := range exclude {
-// 		if matched, _ := filepath.Match(pattern, path); matched {
-// 			return false
-// 		}
-// 		// Also check if it's a subdirectory of an excluded directory
-// 		if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
-// 			return false
-// 		}
-// 	}
-
-// 	return true
-// }
+		// It's a regular file or a symlink to a file
+		return app.copyFile(path, destPath, progressCb)
+	})
+}
 
 
-// // REMOVE OLDEST BACKUP(S)
-// func (app *BackupApp) cleanupOldBackups() error {
-// 	backupRoot := filepath.Dir(app.bkpDestFullPath)
+// COPY FILE
+func (app *BackupApp) copyFile(src, dest string, progressCb func()) error {
+	// Ensure destination directory exists
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return err
+	}
 
-// 	entries, err := os.ReadDir(backupRoot)
-// 	if err != nil {
-// 		return err
-// 	}
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
 
-// 	var backupDirs []os.DirEntry
-// 	for _, entry := range entries {
-// 		if entry.IsDir() && strings.HasPrefix(entry.Name(), fmt.Sprintf("%s-", Prefix)) {
-// 			backupDirs = append(backupDirs, entry)
-// 		}
-// 	}
+	destFile, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
 
-// 	if len(backupDirs) <= int(app.BkpConfig.Retention.BackupsToKeep) {
-// 		return nil
-// 	}
+	_, err = destFile.ReadFrom(srcFile)
+	if err != nil {
+		return err
+	}
 
-// 	// Sort by name (which includes timestamp) and remove oldest
-// 	toDelete := len(backupDirs) - int(app.BkpConfig.Retention.BackupsToKeep)
+	progressCb()
 
-// 	if toDelete > 0 {
-// 		logger.Plain("\n")
-// 		logger.Signature("Cleanup")
-// 	}
+	// Copy file permissions
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
 
-// 	for i := 0; i < toDelete; i++ {
-// 		dirPath := filepath.Join(backupRoot, backupDirs[i].Name())
-// 		logger.Sub("removing old backup: %s", dirPath)
-// 		if err := os.RemoveAll(dirPath); err != nil {
-// 			return fmt.Errorf("removing old backup %s: %w", dirPath, err)
-// 		}
-// 	}
+	return os.Chmod(dest, srcInfo.Mode())
+}
 
-// 	return nil
-// }
+
+// EVALUATE INCLUDE/EXCLUDE PATTERNS
+func (app *BackupApp) shouldInclude(path string, include, exclude []string) bool {
+	// If there are include patterns, check if path matches any
+	if len(include) > 0 {
+		included := false
+		for _, pattern := range include {
+			if matched, _ := filepath.Match(pattern, path); matched {
+				included = true
+				break
+			}
+			// Also check if it's a subdirectory of an included directory
+			if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
+				included = true
+				break
+			}
+		}
+		if !included {
+			return false
+		}
+	}
+
+	// Check exclude patterns (exclude takes priority)
+	for _, pattern := range exclude {
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return false
+		}
+		// Also check if it's a subdirectory of an excluded directory
+		if strings.HasPrefix(path, pattern+string(filepath.Separator)) {
+			return false
+		}
+	}
+
+	return true
+}
+
+
+// REMOVE OLDEST BACKUP(S)
+func (app *BackupApp) cleanupOldBackups() error {
+	backupRoot := filepath.Dir(app.bkpDestFullPath)
+
+	entries, err := os.ReadDir(backupRoot)
+	if err != nil {
+		return err
+	}
+
+	var backupDirs []os.DirEntry
+	for _, entry := range entries {
+		if entry.IsDir() && strings.HasPrefix(entry.Name(), fmt.Sprintf("%s-", Prefix)) {
+			backupDirs = append(backupDirs, entry)
+		}
+	}
+
+	if len(backupDirs) <= int(app.BkpConfig.Retention.BackupsToKeep) {
+		return nil
+	}
+
+	// Sort by name (which includes timestamp) and remove oldest
+	toDelete := len(backupDirs) - int(app.BkpConfig.Retention.BackupsToKeep)
+
+	if toDelete > 0 {
+		logger.Plain("\nCleanup\n")
+	}
+
+	for i := 0; i < toDelete; i++ {
+		dirPath := filepath.Join(backupRoot, backupDirs[i].Name())
+		logger.Sub(fmt.Sprintf("  removing old backup: %s\n", dirPath))
+		if err := os.RemoveAll(dirPath); err != nil {
+			return fmt.Errorf("removing old backup %s: %w", dirPath, err)
+		}
+	}
+
+	return nil
+}
