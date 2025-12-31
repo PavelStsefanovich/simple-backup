@@ -7,7 +7,7 @@ import (
     "path/filepath"
     "reflect"
     "runtime"
-	"strconv"    
+	"strconv"
     "strings"
 )
 
@@ -79,6 +79,7 @@ func getYAMLKeysRecursively(t reflect.Type) (interface{}, error) {
     }
 }
 
+
 // Print YAML structure for debug purposes
 func printYAMLKeysForType(t reflect.Type) {
     keyStructure, err := getYAMLKeysRecursively(t)
@@ -107,6 +108,7 @@ func formatBytes(bytes uint64) string {
 	return strings.Replace(fmt.Sprintf("%.1fgb", gb), ".", ",", 1)
 }
 
+
 // Parse disk size string that is formatted for human readability
 func parseDiskSize(sizeStr string) (uint64, error) {
 	sizeStr = strings.ToLower(strings.TrimSpace(sizeStr))
@@ -132,6 +134,7 @@ func parseDiskSize(sizeStr string) (uint64, error) {
 
 	return uint64(num) * multiplier, nil
 }
+
 
 // Provide os-specific common drives or mount points
 func getAvailableDrives() ([]string, error) {
