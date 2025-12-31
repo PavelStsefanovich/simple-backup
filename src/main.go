@@ -480,7 +480,8 @@ func (app *BackupApp) runBackup() error {
 						remaining = 0
 					}
 					progressBar := strings.Repeat("■", completed) + strings.Repeat(".", remaining)
-					logger.Plain(fmt.Sprintf("\r[%s]", progressBar))
+					// logger.Plain(fmt.Sprintf("\r[%s]", progressBar)) # Using standard print to show incomplete progress bar in console only to avoid cluttering of log file
+					fmt.Printf("\r[%s]", progressBar)
 					lastUpdate = percentage
 				}
 			}
