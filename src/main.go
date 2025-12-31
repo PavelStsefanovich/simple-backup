@@ -536,9 +536,9 @@ func (app *BackupApp) runBackup() error {
 		if err != nil {
 			failedCount++
 			if errors.Is(err, os.ErrNotExist) {
-				logger.Plain(fmt.Sprintf("\n❌ %v\n", err))
+				logger.Err(fmt.Sprintf("\n❌ %v\n", err), style.NoLabel())
 			} else {
-				logger.Plain(fmt.Sprintf("\n❌ (%v): %v\n", elapsed, err))
+				logger.Err(fmt.Sprintf("\n❌ (%v): %v\n", elapsed, err), style.NoLabel())
 			}
 
 			if app.exitOnError {
@@ -609,9 +609,6 @@ func (app *BackupApp) runBackup() error {
 			status = "❌"
 		}
 		logger.Plain(fmt.Sprintf("[%d] %s %s (%v)\n", i+1, status, result.Item.Source, result.Elapsed))
-		if result.Error != nil {
-			logger.Err(fmt.Sprintf("%v\n", result.Error))
-		}
 	}
 
 	if failedCount > 0 {
