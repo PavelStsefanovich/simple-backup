@@ -529,9 +529,7 @@ func (app *BackupApp) runBackup() error {
 	}
 
 	// Cleanup old backups
-	if err := app.cleanupOldBackups(); err != nil {
-		logger.Warn(fmt.Sprintf("Failed to cleanup old backups: %v\n", err))
-	}
+	app.cleanupOldBackups()
 
 	totalElapsed := time.Since(startTime)
 
@@ -769,7 +767,8 @@ func (app *BackupApp) cleanupOldBackups() error {
 
 	entries, err := os.ReadDir(backupRoot)
 	if err != nil {
-		return err
+		logger.Err(fmt.Sprintf("Cleanup failed with error: %s\n", err))
+		return nil
 	}
 
 	var backupDirs []os.DirEntry
@@ -794,7 +793,7 @@ func (app *BackupApp) cleanupOldBackups() error {
 		dirPath := filepath.Join(backupRoot, backupDirs[i].Name())
 		logger.Sub(fmt.Sprintf("  removing old backup: %s\n", dirPath))
 		if err := os.RemoveAll(dirPath); err != nil {
-			return fmt.Errorf("removing old backup %s: %w", dirPath, err)
+			logger.Err(fmt.Sprintf("Failed to remove old backup: %s\n", dirPath))
 		}
 	}
 
