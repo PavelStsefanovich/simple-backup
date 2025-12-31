@@ -157,8 +157,13 @@ func main() {
 
 	// Run backup
 	if err := app.runBackup(); err != nil {
-		logger.Err(fmt.Sprintf("Backup failed: %v\n", err))
+		logger.Plain("\n")
+		logger.Err("BACKUP FAILED!\n\n", style.NoLabel(), style.Bold())
+		os.Exit(2)
 	}
+
+	logger.Plain("\n")
+	logger.Ok("BACKUP COMPLETED SUCCESSFULLY!\n\n", style.NoLabel(), style.Bold())
 }
 
 
@@ -455,14 +460,26 @@ func (app *BackupApp) runBackup() error {
 	// Copy backup items
 	var results []BackupResult
 	var failedCount int
+	var successCount int
+	var totalCount int
 
 	for i, item := range app.BkpConfig.BkpItems {
+		totalCount++
 		logger.Plain(fmt.Sprintf("\n[%d/%d] Backing up: %s\n", i+1, len(app.BkpConfig.BkpItems), item.Source))
 
 		totalItems, err := app.countTotalItems(item)
 		if err != nil {
 			logger.Err(fmt.Sprintf("Failed to count items for backup: %v\n", err))
 			failedCount++
+
+			// Record this failure in results so the summary and detailed output stay in sync.
+			result := BackupResult{
+				Item:    item,
+				Success: false,
+				Error:   err,
+				Elapsed: 0,
+			}
+			results = append(results, result)
 
 			if app.exitOnError {
 				if !app.nonInteractive {
@@ -538,6 +555,8 @@ func (app *BackupApp) runBackup() error {
 				}
 			}
 		} else {
+			// Successful backup for this item.
+			successCount++
 			progressBarLength := 50
 			progressBar := strings.Repeat("■", progressBarLength)
 			logger.Plain(fmt.Sprintf("\r[%s] ", progressBar))
@@ -574,9 +593,14 @@ func (app *BackupApp) runBackup() error {
 	logger.Info(fmt.Sprintf("%s\n", app.bkpDestFullPath), style.NoLabel())
 	// logger.Plain(fmt.Sprintf("Backup destination: %v\n", app.bkpDestFullPath))
 	logger.Plain(fmt.Sprintf("Total time: %v\n", totalElapsed))
-	logger.Plain(fmt.Sprintf("Total items: %d\n", len(results)))
-	logger.Plain(fmt.Sprintf("Successful: %d\n", len(results)-failedCount))
+	logger.Plain(fmt.Sprintf("Total items: %d\n", totalCount))
+	logger.Plain(fmt.Sprintf("Successful: %d\n", successCount))
 	logger.Plain(fmt.Sprintf("Failed: %d\n", failedCount))
+
+	if failedCount != 0 {
+		logger.Plain("\n")
+		logger.Err(fmt.Sprintf("Backup completed with %d failures\n", failedCount))
+	}
 
 	logger.Signature("\nDetailed Results\n")
 	for i, result := range results {
@@ -594,8 +618,6 @@ func (app *BackupApp) runBackup() error {
 		return fmt.Errorf("backup completed with %d failures", failedCount)
 	}
 
-	logger.Plain("\n")
-	logger.Ok("BACKUP COMPLETED SUCCESSFULLY!\n\n", style.NoLabel(), style.Bold())
 	return nil
 }
 
