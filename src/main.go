@@ -418,7 +418,7 @@ func reviewBackupConfig(app *BackupApp) error {
         return nil
     }
 
-    logger.Info("\nProceed with backup? (only \"yes\" will be accepted)\n", style.NoLabel())
+    logger.Info("\nProceed with backup? (only \"yes\" will be accepted to confirm)\n", style.NoLabel())
     var response string
     fmt.Scanln(&response)
     response = strings.TrimSpace(strings.ToLower(response))
@@ -462,6 +462,22 @@ func (app *BackupApp) runBackup() error {
 		totalItems, err := app.countTotalItems(item)
 		if err != nil {
 			logger.Err(fmt.Sprintf("Failed to count items for backup: %v\n", err))
+			failedCount++
+
+			if app.exitOnError {
+				if !app.nonInteractive {
+					logger.Warn("\n\"exitOnError\" is set to True. Exit now? (type \"no\" to continue execution)\n", style.NoLabel())
+					reader := bufio.NewReader(os.Stdin)
+					response, _ := reader.ReadString('\n')
+					response = strings.TrimSpace(strings.ToLower(response))
+					if response != "no" {
+						return fmt.Errorf("backup stopped (with user consent) due to error: %w", err)
+					}
+				} else {
+					return fmt.Errorf("backup stopped (\nexitOnError\n is True) due to error: %w", err)
+				}
+			}
+
 			continue
 		}
 
@@ -530,7 +546,25 @@ func (app *BackupApp) runBackup() error {
 	}
 
 	// Cleanup old backups
-	app.cleanupOldBackups()
+	if failedCount == 0 {
+		app.cleanupOldBackups()
+	} else {
+		if app.nonInteractive {
+			logger.Warn("Backup failed for some items; skipping cleanup of old backups in non-interactive mode.\n")
+		} else {
+			logger.Plain("\n")
+			logger.Warn("Backup failed for some items.\n")
+			logger.Warn("Cleanup old backups now? (only \"yes\" will be accepted to confirm)\n", style.NoLabel())
+			reader := bufio.NewReader(os.Stdin)
+			response, _ := reader.ReadString('\n')
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response == "yes" {
+				app.cleanupOldBackups()
+			} else {
+				logger.Warn("Skipping cleanup of old backups.\n", style.NoLabel())
+			}
+		}
+	}
 
 	totalElapsed := time.Since(startTime)
 
