@@ -5,14 +5,14 @@ import (
 	// "errors"
 	"fmt"
 	"github.com/spf13/pflag"
-	// "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 	"io"
 	"log"
 	"os"
-	// "regexp"
+	"regexp"
 	"path/filepath"
 	"simple-backup/src/style"
-	// "strings"
+	"strings"
 	"time"
 
 	// debug
@@ -84,19 +84,25 @@ type BackupApp struct {
 
 // ENTRY POINT
 func main() {
+	// (debug) Show Backup App object
+	// helpers.PrintYAMLKeysForType(reflect.TypeOf(BackupApp{}))
+	// printYAMLKeysForType(reflect.TypeOf(BackupApp{}))
+	// os.Exit(0)
+
+
 	// Command-line args
 	var (
-		// configFile     = pflag.StringP("config", "c", "", "Path to configuration file.")
-		// bkpDest        = pflag.StringP("bkp-dest", "b", "", "Backup destination drive or mount. Required if -config is specified.")
-		// exitOnError    = pflag.BoolP("exit-on-error", "e", false, "Exit immediately on any copy operation failure.")
+		configFile     = pflag.StringP("config", "c", "", "Path to configuration file.")
+		bkpDest        = pflag.StringP("bkp-dest", "b", "", "Backup destination drive or mount. Required if -config is specified.")
+		exitOnError    = pflag.BoolP("exit-on-error", "e", false, "Exit immediately on any copy operation failure.")
 		logDir         = pflag.StringP("log-dir", "l", "", "Path to a directory to store log file.")
-		// nonInteractive = pflag.BoolP("non-interactive", "n", false, "Skip all user prompts.")
+		nonInteractive = pflag.BoolP("non-interactive", "n", false, "Skip all user prompts.")
 		showHelp       = pflag.BoolP("help", "h", false, "Show help.")
 		showVersion    = pflag.BoolP("version", "v", false, "Show version info.")
 	)
 	pflag.Parse()
 
-		// Show help
+	// Show help
 	if *showHelp {
 		printHelp()
 		return
@@ -115,49 +121,43 @@ func main() {
 		logFilePath := filepath.Join(*logDir, logFileName)
 
 		if err := os.MkdirAll(*logDir, 0755); err != nil {
-			fmt.Printf("Failed to create log directory: %v", err)
-			os.Exit(1)			
+			fmt.Printf("Failed to create log directory: %v\n\n", err)
+			os.Exit(1)
 		}
 
 		logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
-			fmt.Printf("Failed to open log file: %v", err)
+			fmt.Printf("Failed to open log file: %v\n\n", err)
 			os.Exit(1)
 		}
 		defer logFile.Close()
 
 		logObj := log.New(logFile, "", log.LstdFlags)
 		logger = style.New(logObj)
-		logger.Info("Logging initialized.", style.Log())
+		logger.Info("Logging initialized.\n")
 
 	} else {
 		logObj := log.New(io.Discard, "", log.LstdFlags)
 		logger = style.New(logObj)
-		logger.Warn("Log directory not specified, writing to console only.")
+		logger.Warn("Log directory not specified, writing to console only.\n")
 	}
 
-	// (debug) Show Backup App object
-	// helpers.PrintYAMLKeysForType(reflect.TypeOf(BackupApp{}))
-	// printYAMLKeysForType(reflect.TypeOf(BackupApp{}))
+	// Initiate main app
+	app, err := NewBackupApp(*bkpDest, *configFile, *exitOnError, *nonInteractive)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("Failed to initialize application: %v\n\n", err), style.Bold())
+		os.Exit(1)
+	}
 
-	// // Initiate main app
-	// app, err := NewBackupApp(*bkpDest, *configFile, *exitOnError, *nonInteractive)
-	// if err != nil {
-	// 	logger.Err("Failed to initialize application: %v", err)
-	// 	os.Exit(1)
-	// 	// log.Fatalf("Failed to initialize application: %v", err)
-	// 	// return
-	// }
-
-	// // Review backup configuration before proceeding
-	// if err = reviewBackupConfig(app); err != nil {
-	// 	logger.Err("Review failed: %v", err)
-	// 	return
-	// }
+	// Review backup configuration before proceeding
+	if err = reviewBackupConfig(app); err != nil {
+		logger.Fatal(fmt.Sprintf("Review failed: %v\n\n", err), style.Bold())
+		os.Exit(1)
+	}
 
 	// // Run backup
 	// if err := app.runBackup(); err != nil {
-	// 	logger.Err("Backup failed: %v", err)
+	// 	logger.Err(fmt.Sprintf("Backup failed: %v\n", err))
 	// }
 }
 
@@ -182,255 +182,255 @@ func printVersion() {
 }
 
 
-// // MAIN APP INIT
-// func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive bool) (*BackupApp, error) {
-// 	app := &BackupApp{
-// 		BkpConfig:		*NewConfig(), // Set defaults first
-// 		bkpDest:        bkpDest,
-// 		exitOnError:    exitOnError,
-// 		nonInteractive: nonInteractive,
-// 	}
+// MAIN APP INIT
+func NewBackupApp(bkpDest, configFile string, exitOnError, nonInteractive bool) (*BackupApp, error) {
+	app := &BackupApp{
+		BkpConfig:		*NewConfig(), // Set defaults first
+		bkpDest:        bkpDest,
+		exitOnError:    exitOnError,
+		nonInteractive: nonInteractive,
+	}
 
-// 	// Case: Backup Destination explicitly specified by user
-// 	if bkpDest != "" {
-// 		logger.Plain("Trying to access specified backup destination %q... ", bkpDest)
-// 		_, err := os.Stat(bkpDest)
-// 		if err != nil {
-// 			logger.PlainLn("")
-// 			if perr, ok := err.(*os.PathError); ok { // this wrapper code allows to parse the error and enquote file path
-// 				return nil, fmt.Errorf("%q: %v", perr.Path, perr.Err)
-// 			}
-// 			return nil, fmt.Errorf("accessing backup destination: %w", err)
-// 		}
-// 		logger.Ok("")
-// 		app.bkpDest = bkpDest
-// 	}
+	// Case: Backup Destination explicitly specified by user
+	if bkpDest != "" {
+		logger.Plain(fmt.Sprintf("Trying to access specified backup destination %q... ", bkpDest))
+		_, err := os.Stat(bkpDest)
+		if err != nil {
+			logger.Plain("\n")
+			if perr, ok := err.(*os.PathError); ok { // this wrapper code allows to parse the error and enquote file path
+				return nil, fmt.Errorf("%q: %v", perr.Path, perr.Err)
+			}
+			return nil, fmt.Errorf("accessing backup destination: %w", err)
+		}
+		logger.Ok("\n")
+		app.bkpDest = bkpDest
+	}
 
-// 	// Case: Config File explicitly specified by user
-// 	if configFile != "" {
-// 		// Case: Config File explicitly specified by User, but Backup Destination is NOT
-// 		if app.bkpDest == "" {
-// 			return nil, fmt.Errorf("%q is not provided, but it is required when %q is specified", "-bkp-dest", "-config")
-// 		}
-// 		// Case: Both Config File and Backup Destination explicitly specified by user
-// 		logger.Plain("Reading specified config file %q... ", configFile)
-// 		if err := app.loadConfig(configFile); err != nil {
-// 			return nil, err
-// 		}
-// 	}
+	// Case: Config File explicitly specified by user
+	if configFile != "" {
+		// Case: Config File explicitly specified by User, but Backup Destination is NOT
+		if app.bkpDest == "" {
+			return nil, fmt.Errorf("%q is not provided, but it is required when %q is specified", "-bkp-dest", "-config")
+		}
+		// Case: Both Config File and Backup Destination explicitly specified by user
+		logger.Plain(fmt.Sprintf("Reading specified config file %q... ", configFile))
+		if err := app.loadConfig(configFile); err != nil {
+			return nil, err
+		}
+	}
 
-// 	// Case: Backup Destination is NOT specified
-// 	// (this means that Config File is NOT specified ether)
-// 	if app.bkpDest == "" {
-// 		// Get available drives and mount points
-// 		logger.InfoLite("%q is not specified.", "-bkp-dest")
-// 		logger.Plain("Retrieving available drives and common mount points... ")
-// 		drives, err := getAvailableDrives()
-// 		if err != nil {
-// 			logger.PlainLn("")
-// 			return nil, fmt.Errorf("getting available drives: %w", err)
-// 		}
-// 		logger.Ok("")
+	// Case: Backup Destination is NOT specified
+	// (this means that Config File is NOT specified ether)
+	if app.bkpDest == "" {
+		// Get available drives and mount points
+		logger.Info(fmt.Sprintf("%q is not specified.\n", "-bkp-dest"))
+		logger.Plain("Retrieving available drives and common mount points... ")
+		drives, err := getAvailableDrives()
+		if err != nil {
+			logger.Plain("\n")
+			return nil, fmt.Errorf("getting available drives: %w", err)
+		}
+		logger.Ok("\n")
 
-// 		// Print found destinations
-// 		for _, drive := range drives {
-// 			logger.Sub("  %s", drive)
-// 		}
+		// Print found destinations
+		for _, drive := range drives {
+			logger.Sub(fmt.Sprintf("  %s\n", drive))
+		}
 
-// 		// Search for the first destination with default backup config file in it's root
-// 		logger.Plain("Searching for %q file in the root of available drives and mount points... ", ConfigFileDefault)
-// 		for _, drive := range drives {
-// 			configFile := filepath.Join(drive, ConfigFileDefault)
-// 			if _, err := os.Stat(configFile); err == nil {
-// 				// Found a backup destination candidate
-// 				logger.Ok("")
-// 				logger.Plain("Reading config file %q... ", configFile)
-// 				if err := app.loadConfig(configFile); err != nil {
-// 					return nil, err
-// 				}
-// 				app.bkpDest = drive
-// 				break
-// 			}
-// 		}
+		// Search for the first destination with default backup config file in it's root
+		logger.Plain(fmt.Sprintf("Searching for %q file in the root of available drives and mount points... ", ConfigFileDefault))
+		for _, drive := range drives {
+			configFile := filepath.Join(drive, ConfigFileDefault)
+			if _, err := os.Stat(configFile); err == nil {
+				// Found a backup destination candidate
+				logger.Ok("\n")
+				logger.Plain(fmt.Sprintf("Reading config file %q... ", configFile))
+				if err := app.loadConfig(configFile); err != nil {
+					return nil, err
+				}
+				app.bkpDest = drive
+				break
+			}
+		}
 
-// 		if app.bkpDest == "" {
-// 			logger.PlainLn("")
-// 			return nil, fmt.Errorf("no backup destination found. Place '.smbkp.yaml' in the root of the destination drive or use the -bkp-dest flag")
-// 		}
-// 	}
+		if app.bkpDest == "" {
+			logger.Plain("\n")
+			return nil, fmt.Errorf("no backup destination found. Place '.smbkp.yaml' in the root of the destination drive or use the -bkp-dest flag")
+		}
+	}
 
-// 	// Case: Backup Destination is explicitly specified by user, but Config File is NOT
-// 	if app.configFile == "" {
-// 		configFile := filepath.Join(app.bkpDest, ConfigFileDefault)
-// 		logger.InfoLite("%q is not specified. Assuming default config file in the root of backup destination.", "-config")
-// 		logger.Plain("Reading assumed config file %q... ", configFile)
-// 		if err := app.loadConfig(configFile); err != nil {
-// 			return nil, err
-// 		}
-// 	}
+	// Case: Backup Destination is explicitly specified by user, but Config File is NOT
+	if app.configFile == "" {
+		configFile := filepath.Join(app.bkpDest, ConfigFileDefault)
+		logger.Info(fmt.Sprintf("%q is not specified. Assuming default config file in the root of backup destination.", "-config"))
+		logger.Plain(fmt.Sprintf("Reading assumed config file %q... ", configFile))
+		if err := app.loadConfig(configFile); err != nil {
+			return nil, err
+		}
+	}
 
-// 	// Creating full backup destination path (bkpDest/bkp_dest_dir/<unique_dir>) #REVIEW The usnique path can be constructed using the timestamp wnen backup starts
-// 	// fullPath, _ := generateUniquePath(app.bkpDest, app.BkpConfig.BkpDestDir)
-// 	app.bkpDestFullPath = filepath.Join(app.bkpDest, app.BkpConfig.BkpDestDir)
+	// Creating full backup destination path (bkpDest/bkp_dest_dir/<unique_dir>) #REVIEW The usnique path can be constructed using the timestamp wnen backup starts
+	// fullPath, _ := generateUniquePath(app.bkpDest, app.BkpConfig.BkpDestDir)
+	app.bkpDestFullPath = filepath.Join(app.bkpDest, app.BkpConfig.BkpDestDir)
 
-// 	return app, nil
-// }
-
-
-// // INIT CONFIG STRUCT WITH DEFAULT VALUES
-// func NewConfig() *Config {
-// 	return &Config{
-// 		BkpDestDir: BackupDestDirDefault,
-// 		Retention: struct {
-// 			BackupsToKeep uint16    `yaml:"backups_to_keep"`
-// 			MinFreeSpace  string `yaml:"min_free_space"`
-// 			minFreeSpaceParsed uint64
-// 		}{
-// 			BackupsToKeep: 		LimitMinBackupsToKeep,
-// 			MinFreeSpace:  		LimitMinFreeSpace,
-// 			minFreeSpaceParsed:	LimitMinFreeSpaceParsed,
-// 		},
-// 		BkpItems: []BackupItem{},
-// 	}
-// }
+	return app, nil
+}
 
 
-// // LOAD MAIN CONFIG FROM FILE
-// func (app *BackupApp) loadConfig(configFile string) error {
-// 	data, err := os.ReadFile(configFile)
-
-// 	if err != nil {
-// 		logger.PlainLn("")
-// 		if perr, ok := err.(*os.PathError); ok { // this wrapper code allows to parse the error and enquote file path
-// 			return fmt.Errorf("%q: %v", perr.Path, perr.Err)
-// 		}
-// 		return fmt.Errorf("reading config file: %w", err)
-// 	}
-// 	logger.Ok("")
-
-// 	if err := yaml.Unmarshal(data, &app.BkpConfig); err != nil {
-// 		return fmt.Errorf("parsing config file: %w", err)
-// 	}
-
-// 	if err := app.BkpConfig.validate(); err != nil {
-// 		logger.PlainLn("")
-// 		return fmt.Errorf("invalid configuration: %w", err)
-// 	}
-
-// 	app.configFile = configFile
-// 	return nil
-// }
+// INIT CONFIG STRUCT WITH DEFAULT VALUES
+func NewConfig() *Config {
+	return &Config{
+		BkpDestDir: BackupDestDirDefault,
+		Retention: struct {
+			BackupsToKeep uint16    `yaml:"backups_to_keep"`
+			MinFreeSpace  string `yaml:"min_free_space"`
+			minFreeSpaceParsed uint64
+		}{
+			BackupsToKeep: 		LimitMinBackupsToKeep,
+			MinFreeSpace:  		LimitMinFreeSpace,
+			minFreeSpaceParsed:	LimitMinFreeSpaceParsed,
+		},
+		BkpItems: []BackupItem{},
+	}
+}
 
 
-// // VALIDATE MAIN APP CONFIG
-// func (c *Config) validate() error {
-// 	// Validate backups_to_keep
-// 	if c.Retention.BackupsToKeep < LimitMinBackupsToKeep {
-// 		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.", "backups_to_keep", c.Retention.BackupsToKeep, LimitMinBackupsToKeep)
-// 		logger.WarnLite(msg)
-// 		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
-// 	}
+// LOAD MAIN CONFIG FROM FILE
+func (app *BackupApp) loadConfig(configFile string) error {
+	data, err := os.ReadFile(configFile)
 
-// 	// Validate min_free_space format. This will fail if the user explicitly specifies it with an empty string value.
-// 	re := regexp.MustCompile(MinFreeSpacePattern)
-// 	if !re.MatchString(strings.ToLower(c.Retention.MinFreeSpace)) {
-// 		return fmt.Errorf(
-// 			"%q value %q has invalid format. Expected format is a number followed by 'mb' or 'gb' (e.g., '100mb', '10gb')",
-// 			"min_free_space",
-// 			c.Retention.MinFreeSpace,
-// 		)
-// 	}
+	if err != nil {
+		logger.Plain("\n")
+		if perr, ok := err.(*os.PathError); ok { // this wrapper code allows to parse the error and enquote file path
+			return fmt.Errorf("%q: %v", perr.Path, perr.Err)
+		}
+		return fmt.Errorf("reading config file: %w", err)
+	}
 
-// 	// Valiedate min_free_space value
-// 	minFreeSpaceParsed, err := parseDiskSize(c.Retention.MinFreeSpace)
-// 	if err != nil {
-// 		return err
-// 	}
+	if err := yaml.Unmarshal(data, &app.BkpConfig); err != nil {
+		logger.Plain("\n")
+		return fmt.Errorf("parsing config file: %w", err)
+	}
 
-// 	if minFreeSpaceParsed < LimitMinFreeSpaceParsed {
-// 		msg := fmt.Sprintf("%q value increased from '%s' to '%s', which is allowed minimum.", "min_free_space", c.Retention.MinFreeSpace, LimitMinFreeSpace)
-// 		logger.WarnLite(msg)
-// 		c.Retention.MinFreeSpace = LimitMinFreeSpace
-// 		c.Retention.minFreeSpaceParsed = LimitMinFreeSpaceParsed
-// 	}
-// 	c.Retention.minFreeSpaceParsed = minFreeSpaceParsed
+	if err := app.BkpConfig.validate(); err != nil {
+		logger.Plain("\n")
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
 
-// 	// Set destination attribute of each item under bkp_items to item's source leaf, if destination is not specified
-// 	for i := range c.BkpItems {
-// 		if c.BkpItems[i].Destination == "" {
-// 			c.BkpItems[i].Destination = filepath.Base(c.BkpItems[i].Source)
-// 		}
-// 	}
+	logger.Ok("\n")
+	app.configFile = configFile
+	return nil
+}
 
 
-// 	// Future validation for schedule type, etc., can be added here.
-// 	return nil
-// }
+// VALIDATE MAIN APP CONFIG
+func (c *Config) validate() error {
+	// Validate backups_to_keep
+	if c.Retention.BackupsToKeep < LimitMinBackupsToKeep {
+		msg := fmt.Sprintf("%q value increased from '%d' to '%d', which is allowed minimum.\n", "backups_to_keep", c.Retention.BackupsToKeep, LimitMinBackupsToKeep)
+		logger.Warn(msg)
+		c.Retention.BackupsToKeep = LimitMinBackupsToKeep
+	}
+
+	// Validate min_free_space format. This will fail if the user explicitly specifies it with an empty string value.
+	re := regexp.MustCompile(MinFreeSpacePattern)
+	if !re.MatchString(strings.ToLower(c.Retention.MinFreeSpace)) {
+		return fmt.Errorf(
+			"%q value %q has invalid format. Expected format is a number followed by 'mb' or 'gb' (e.g., '100mb', '10gb')",
+			"min_free_space",
+			c.Retention.MinFreeSpace,
+		)
+	}
+
+	// Valiedate min_free_space value
+	minFreeSpaceParsed, err := parseDiskSize(c.Retention.MinFreeSpace)
+	if err != nil {
+		return err
+	}
+
+	if minFreeSpaceParsed < LimitMinFreeSpaceParsed {
+		msg := fmt.Sprintf("%q value increased from '%s' to '%s', which is allowed minimum.\n", "min_free_space", c.Retention.MinFreeSpace, LimitMinFreeSpace)
+		logger.Warn(msg)
+		c.Retention.MinFreeSpace = LimitMinFreeSpace
+		c.Retention.minFreeSpaceParsed = LimitMinFreeSpaceParsed
+	}
+	c.Retention.minFreeSpaceParsed = minFreeSpaceParsed
+
+	// Set destination attribute of each item under bkp_items to item's source leaf, if destination is not specified
+	for i := range c.BkpItems {
+		if c.BkpItems[i].Destination == "" {
+			c.BkpItems[i].Destination = filepath.Base(c.BkpItems[i].Source)
+		}
+	}
 
 
-// // REVIEW BACKUP CONFIGURATION BEFORE PROCEEDING
-// func reviewBackupConfig(app *BackupApp) error {
-// 	fmt.Println()
-//     logger.Signature("========  Backup Configuration Review  ========")
-//     logger.PlainLn("Config file: %s", app.configFile)
-// 	logger.Plain("Backup destination: ")
-// 	logger.Signature(app.bkpDestFullPath)
+	// Future validation for schedule type, etc., can be added here.
+	return nil
+}
 
 
-// 	// Validate min_free_space
-// 	logger.PlainLn("Minimum required free space: %s ", app.BkpConfig.Retention.MinFreeSpace)
+// REVIEW BACKUP CONFIGURATION BEFORE PROCEEDING
+func reviewBackupConfig(app *BackupApp) error {
+    logger.Signature("\n========  Backup Configuration Review  ========\n")
+    logger.Plain(fmt.Sprintf("Config file: %s\n", app.configFile))
+	logger.Plain("Backup destination: ")
+	logger.Signature(fmt.Sprintf("%s\n", app.bkpDestFullPath))
 
-// 	availableFreeSpace, availableFreeSpaceFormatted, err := getFreeSpace(app.bkpDest)
-// 	if err != nil {
-// 		return fmt.Errorf("reading free space: %w", err)
-// 	}
 
-// 	logger.PlainLn("Available free space: %s", availableFreeSpaceFormatted) // Check space on the root of the backup destination
+	// Validate min_free_space
+	logger.Plain(fmt.Sprintf("Minimum required free space: %s\n", app.BkpConfig.Retention.MinFreeSpace))
 
-// 	if availableFreeSpace < app.BkpConfig.Retention.minFreeSpaceParsed {
-// 		return fmt.Errorf("available free space (%s) is less than required minimum (%s)", availableFreeSpaceFormatted, app.BkpConfig.Retention.MinFreeSpace)
-// 	}
+	availableFreeSpace, availableFreeSpaceFormatted, err := getFreeSpace(app.bkpDest)
+	if err != nil {
+		return fmt.Errorf("reading free space: %w", err)
+	}
 
-// 	logger.PlainLn("Backups to keep: %d", app.BkpConfig.Retention.BackupsToKeep)
-//     logger.PlainLn("Non-interactive: %t", app.nonInteractive)
-// 	logger.PlainLn("Exit on error: %t", app.exitOnError)
-// 	fmt.Println()
+	logger.Plain(fmt.Sprintf("Available free space: %s\n", availableFreeSpaceFormatted)) // Check space on the root of the backup destination
 
-// 	// Validate bkp_items
-// 	logger.PlainLn("Items to backup: %d", len(app.BkpConfig.BkpItems))
-// 	if len(app.BkpConfig.BkpItems) == 0 {
-// 		logger.Warn("No items listed under 'bkp_items' in the config file, nothing to backup. Exiting.")
-// 		fmt.Println()
-// 		os.Exit(0)
-// 	}
+	if availableFreeSpace < app.BkpConfig.Retention.minFreeSpaceParsed {
+		return fmt.Errorf("available free space (%s) is less than required minimum (%s)", availableFreeSpaceFormatted, app.BkpConfig.Retention.MinFreeSpace)
+	}
 
-//     for i, item := range app.BkpConfig.BkpItems {
-//         logger.PlainLn("\n  [%d] Source: %s", i+1, item.Source)
-//         logger.PlainLn("      Destination: %s", item.Destination)
-//         if len(item.Include) > 0 {
-//             logger.PlainLn("      Include: %v", strings.Join(item.Include, ", "))
-//         }
-//         if len(item.Exclude) > 0 {
-//             logger.PlainLn("      Exclude: %v", strings.Join(item.Exclude, ", "))
-//         }
-//     }
+	logger.Plain(fmt.Sprintf("Backups to keep: %d\n", app.BkpConfig.Retention.BackupsToKeep))
+    logger.Plain(fmt.Sprintf("Non-interactive: %t\n", app.nonInteractive))
+	logger.Plain(fmt.Sprintf("Exit on error: %t\n", app.exitOnError))
+	logger.Plain("\n")
 
-//     if app.nonInteractive {
-//         return nil
-//     }
+	// Validate bkp_items
+	logger.Plain(fmt.Sprintf("Items to backup: %d\n", len(app.BkpConfig.BkpItems)))
+	if len(app.BkpConfig.BkpItems) == 0 {
+		logger.Warn("No items listed under 'bkp_items' in the config file, nothing to backup. Exiting.\n\n")
+		os.Exit(0)
+	}
 
-//     logger.Prompt("Proceed with backup? (only \"yes\" will be accepted)")
-//     var response string
-//     fmt.Scanln(&response)
-// 	fmt.Println()
-//     response = strings.TrimSpace(strings.ToLower(response))
-//     if response != "yes" {
-//         logger.WarnLite("Backup cancelled by user.")
-// 		fmt.Println()
-//         os.Exit(0)
-//     }
-// 	return nil
-// }
+    for i, item := range app.BkpConfig.BkpItems {
+        logger.Plain(fmt.Sprintf("\n  [%d] Source: %s\n", i+1, item.Source))
+        logger.Plain(fmt.Sprintf("      Destination: %s\n", item.Destination))
+        if len(item.Include) > 0 {
+            logger.Plain(fmt.Sprintf("      Include: %v\n", strings.Join(item.Include, ", ")))
+        }
+        if len(item.Exclude) > 0 {
+            logger.Plain(fmt.Sprintf("      Exclude: %v\n", strings.Join(item.Exclude, ", ")))
+        }
+    }
+
+    if app.nonInteractive {
+        return nil
+    }
+
+    logger.Info("\nProceed with backup? (only \"yes\" will be accepted)\n", style.NoLabel())
+    var response string
+    fmt.Scanln(&response)
+    response = strings.TrimSpace(strings.ToLower(response))
+	logger.Plain("\n")
+
+    if response != "yes" {
+        logger.Warn("Backup cancelled by user.\n\n")
+        os.Exit(0)
+    }
+
+	return nil
+}
 
 
 
@@ -448,10 +448,10 @@ func printVersion() {
 // 	app.bkpDestFullPath = filepath.Join(app.bkpDestFullPath, fmt.Sprintf("%s-%s", Prefix, timestamp))
 // 	logger.Plain("Creating backup directory %q... ", app.bkpDestFullPath)
 // 	if err := os.MkdirAll(app.bkpDestFullPath, 0755); err != nil {
-// 		logger.PlainLn("")
+// 		logger.Plain("\n")
 // 		return fmt.Errorf("creating backup directory: %w", err)
 // 	}
-// 	logger.Ok("")
+// 	logger.Ok("\n")
 
 // 	// Copy backup items
 // 	var results []BackupResult
@@ -537,7 +537,7 @@ func printVersion() {
 // 	totalElapsed := time.Since(startTime)
 
 // 	// Print summary
-// 	logger.PlainLn("")
+// 	logger.Plain("\n")
 // 	logger.Signature("==============  Backup  Summary  ==============")
 // 	logger.PlainLn("Backup destination: %v", app.bkpDestFullPath)
 // 	logger.PlainLn("Total time: %v", totalElapsed)
@@ -545,7 +545,7 @@ func printVersion() {
 // 	logger.PlainLn("Successful: %d", len(results)-failedCount)
 // 	logger.PlainLn("Failed: %d", failedCount)
 
-// 	logger.PlainLn("")
+// 	logger.Plain("\n")
 // 	logger.Signature("Detailed Results")
 // 	for i, result := range results {
 // 		status := "✅"
@@ -562,9 +562,9 @@ func printVersion() {
 // 		return fmt.Errorf("backup completed with %d failures", failedCount)
 // 	}
 
-// 	logger.PlainLn("")
+// 	logger.Plain("\n")
 // 	logger.Success("Backup completed successfully!")
-// 	logger.PlainLn("")
+// 	logger.Plain("\n")
 // 	return nil
 // }
 
@@ -789,7 +789,7 @@ func printVersion() {
 // 	toDelete := len(backupDirs) - int(app.BkpConfig.Retention.BackupsToKeep)
 
 // 	if toDelete > 0 {
-// 		logger.PlainLn("")
+// 		logger.Plain("\n")
 // 		logger.Signature("Cleanup")
 // 	}
 
