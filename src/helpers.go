@@ -165,3 +165,26 @@ func getAvailableDrives() ([]string, error) {
 
 	return drives, nil
 }
+
+
+// isWindowsProtectedPath returns true for known system-protected entries on Windows
+// that we should skip if we hit permission errors while walking the filesystem.
+func isWindowsProtectedPath(path string, err error) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+
+	base := filepath.Base(path)
+	switch base {
+	case "System Volume Information", "$RECYCLE.BIN":
+		return true
+	}
+
+	// As a fallback, treat generic permission-denied errors on Windows as skippable
+	// for counting/copying purposes when walking.
+	if os.IsPermission(err) {
+		return true
+	}
+
+	return false
+}

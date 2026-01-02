@@ -655,6 +655,9 @@ func (app *BackupApp) countTotalItems(item BackupItem) (int, error) {
 
 	err = filepath.Walk(item.Source, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			if isWindowsProtectedPath(path, err) {
+				return nil
+			}
 			return err
 		}
 
@@ -686,6 +689,9 @@ func (app *BackupApp) countTotalItems(item BackupItem) (int, error) {
 func (app *BackupApp) copyDirectory(src, dest string, include, exclude []string, progressCb func()) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			if isWindowsProtectedPath(path, err) {
+				return nil
+			}
 			return err
 		}
 
