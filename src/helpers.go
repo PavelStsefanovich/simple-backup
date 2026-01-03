@@ -1,7 +1,9 @@
 package main
 
 import (
+    "bufio"
     "fmt"
+    "golang.org/x/term"
     "gopkg.in/yaml.v3"
     "os"
     "path/filepath"
@@ -187,4 +189,30 @@ func isWindowsProtectedPath(path string, err error) bool {
 	}
 
 	return false
+}
+
+
+// EXIT APP WITH OPTIONAL INTERACTIVE PAUSE
+func exitApp(nonInteractive bool, code int) {
+	if !nonInteractive {
+		logger.Plain("Press Enter to exit...")
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadString('\n')
+	}
+	os.Exit(code)
+}
+
+func getTerminalWidth() int {
+    // Get the file descriptor for terminal output
+    fd := int(os.Stdout.Fd())
+
+    // Get width and height
+    width, _, err := term.GetSize(fd)
+
+    if err != nil {
+        // Handle case where output is redirected to a file/pipe
+        return 70 // return a hard limit of 70 chars
+    }
+
+    return width
 }

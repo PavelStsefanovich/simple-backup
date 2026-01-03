@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/spf13/pflag"
+	"golang.org/x/sys/windows"
 	"gopkg.in/yaml.v3"
 	"io"
 	"log"
 	"os"
 	"regexp"
+	"runtime"
 	"path/filepath"
 	"simple-backup/src/style"
 	"strings"
@@ -24,14 +26,14 @@ var logger *style.Style
 
 // LIMITS AND DEFAULTS
 const (
+	Prefix string					= "smbkp"
+	Version string					= "0.1.0"	
 	BackupDestDirDefault string  	= "smbkp"
 	ConfigFileDefault string		= ".smbkp.yaml"
 	LimitMinBackupsToKeep uint16	= 1
 	LimitMinFreeSpace string		= "10mb"
 	LimitMinFreeSpaceParsed uint64	= 10485760
 	MinFreeSpacePattern	string		= `^\d+(mb|gb)$`
-	Prefix string					= "smbkp"
-	Version string					= "0.1.0"
 )
 
 
@@ -82,6 +84,25 @@ type BackupApp struct {
 
 //////////////  INIT FUNCTIONS  ///////////////////////////////////////////////
 
+func init() {
+	// Fixes Virtual Terminal Processing in elevated terminal on Windows.
+    if runtime.GOOS == "windows" {
+        stdout := windows.Handle(os.Stdout.Fd())
+        var originalMode uint32
+
+        // Get the current console mode
+        windows.GetConsoleMode(stdout, &originalMode)
+        
+        // Add the Virtual Terminal Processing flag
+        // 0x0004 is the hex value for ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        newMode := originalMode | windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        
+        // Set the new mode
+        windows.SetConsoleMode(stdout, newMode)
+    }
+}
+
+
 // ENTRY POINT
 func main() {
 	// (debug) Show Backup App object
@@ -122,13 +143,13 @@ func main() {
 
 		if err := os.MkdirAll(*logDir, 0755); err != nil {
 			fmt.Printf("Failed to create log directory: %v\n\n", err)
-			os.Exit(1)
+			exitApp(*nonInteractive, 1)
 		}
 
 		logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		if err != nil {
 			fmt.Printf("Failed to open log file: %v\n\n", err)
-			os.Exit(1)
+			exitApp(*nonInteractive, 1)
 		}
 		defer logFile.Close()
 
@@ -146,24 +167,25 @@ func main() {
 	app, err := NewBackupApp(*bkpDest, *configFile, *exitOnError, *nonInteractive)
 	if err != nil {
 		logger.Fatal(fmt.Sprintf("Failed to initialize application: %v\n\n", err), style.Bold())
-		os.Exit(1)
+		exitApp(*nonInteractive, 1)
 	}
 
 	// Review backup configuration before proceeding
 	if err = reviewBackupConfig(app); err != nil {
 		logger.Fatal(fmt.Sprintf("Review failed: %v\n\n", err), style.Bold())
-		os.Exit(1)
+		exitApp(app.nonInteractive, 1)
 	}
 
 	// Run backup
 	if err := app.runBackup(); err != nil {
 		logger.Plain("\n")
 		logger.Err("BACKUP FAILED!\n\n", style.NoLabel(), style.Bold())
-		os.Exit(2)
+		exitApp(app.nonInteractive, 2)
 	}
 
 	logger.Plain("\n")
 	logger.Ok("BACKUP COMPLETED SUCCESSFULLY!\n\n", style.NoLabel(), style.Bold())
+	exitApp(app.nonInteractive, 0)
 }
 
 
@@ -376,11 +398,10 @@ func (c *Config) validate() error {
 
 // REVIEW BACKUP CONFIGURATION BEFORE PROCEEDING
 func reviewBackupConfig(app *BackupApp) error {
-    logger.Signature("\n=========  Backup Configuration Review  =========\n")
-    logger.Plain(fmt.Sprintf("Config file: %s\n", app.configFile))
+	logger.Signature("\n=========  Backup Configuration Review  =========\n")
+	logger.Plain(fmt.Sprintf("Config file: %s\n", app.configFile))
 	logger.Plain("Backup destination: ")
 	logger.Info(fmt.Sprintf("%s\n", app.bkpDestFullPath), style.NoLabel())
-
 
 	// Validate min_free_space
 	logger.Plain(fmt.Sprintf("Minimum required free space: %s\n", app.BkpConfig.Retention.MinFreeSpace))
@@ -397,7 +418,7 @@ func reviewBackupConfig(app *BackupApp) error {
 	}
 
 	logger.Plain(fmt.Sprintf("Backups to keep: %d\n", app.BkpConfig.Retention.BackupsToKeep))
-    logger.Plain(fmt.Sprintf("Non-interactive: %t\n", app.nonInteractive))
+	logger.Plain(fmt.Sprintf("Non-interactive: %t\n", app.nonInteractive))
 	logger.Plain(fmt.Sprintf("Exit on error: %t\n", app.exitOnError))
 	logger.Plain("\n")
 
@@ -405,34 +426,34 @@ func reviewBackupConfig(app *BackupApp) error {
 	logger.Plain(fmt.Sprintf("Items to backup: %d\n", len(app.BkpConfig.BkpItems)))
 	if len(app.BkpConfig.BkpItems) == 0 {
 		logger.Warn("No items listed under 'bkp_items' in the config file, nothing to backup. Exiting.\n\n")
-		os.Exit(0)
+		exitApp(app.nonInteractive, 0)
 	}
 
-    for i, item := range app.BkpConfig.BkpItems {
-        logger.Plain(fmt.Sprintf("\n  [%d] Source: %s\n", i+1, item.Source))
-        logger.Plain(fmt.Sprintf("      Destination: %s\n", item.Destination))
-        if len(item.Include) > 0 {
-            logger.Plain(fmt.Sprintf("      Include: %v\n", strings.Join(item.Include, ", ")))
-        }
-        if len(item.Exclude) > 0 {
-            logger.Plain(fmt.Sprintf("      Exclude: %v\n", strings.Join(item.Exclude, ", ")))
-        }
-    }
+	for i, item := range app.BkpConfig.BkpItems {
+		logger.Plain(fmt.Sprintf("\n  [%d] Source: %s\n", i+1, item.Source))
+		logger.Plain(fmt.Sprintf("      Destination: %s\n", item.Destination))
+		if len(item.Include) > 0 {
+			logger.Plain(fmt.Sprintf("      Include: %v\n", strings.Join(item.Include, ", ")))
+		}
+		if len(item.Exclude) > 0 {
+			logger.Plain(fmt.Sprintf("      Exclude: %v\n", strings.Join(item.Exclude, ", ")))
+		}
+	}
 
-    if app.nonInteractive {
-        return nil
-    }
+	if app.nonInteractive {
+		return nil
+	}
 
-    logger.Info("\nProceed with backup? (only \"yes\" will be accepted to confirm)\n", style.NoLabel())
-    var response string
-    fmt.Scanln(&response)
-    response = strings.TrimSpace(strings.ToLower(response))
+	logger.Info("\nProceed with backup? (only \"yes\" will be accepted to confirm)\n", style.NoLabel())
+	var response string
+	fmt.Scanln(&response)
+	response = strings.TrimSpace(strings.ToLower(response))
 	logger.Plain("\n")
 
-    if response != "yes" {
-        logger.Warn("Backup cancelled by user.\n\n")
+	if response != "yes" {
+		logger.Warn("Backup cancelled by user.\n\n")
         os.Exit(0)
-    }
+	}
 
 	return nil
 }
@@ -465,7 +486,23 @@ func (app *BackupApp) runBackup() error {
 
 	for i, item := range app.BkpConfig.BkpItems {
 		totalCount++
-		logger.Plain(fmt.Sprintf("\n[%d/%d] Backing up: %s\n", i+1, len(app.BkpConfig.BkpItems), item.Source))
+
+		// Create log message for the item that is currently being backed up
+		cur_item_message := fmt.Sprintf("\n[%d/%d] Backing up: %s", i+1, len(app.BkpConfig.BkpItems), item.Source)
+		if len(item.Include) != 0 {
+			cur_item_message = cur_item_message + fmt.Sprintf("  (Include: %v)\n", strings.Join(item.Include, ", "))
+		} else {
+			cur_item_message = cur_item_message + fmt.Sprintf("  (Exclude: %v)\n", strings.Join(item.Exclude, ", "))
+		}
+
+		// Fit the log message into the terminal
+		runes := []rune(cur_item_message)
+		if len(runes) >= getTerminalWidth() {
+			cur_item_message = string(runes[:(getTerminalWidth()-6)]) + "... )\n"
+		}
+
+		// Log the message
+		logger.Plain(cur_item_message)
 
 		totalItems, err := app.countTotalItems(item)
 		if err != nil {
