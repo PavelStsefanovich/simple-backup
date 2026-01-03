@@ -11,6 +11,7 @@ import (
     "runtime"
 	"strconv"
     "strings"
+    "time"
 )
 
 const (
@@ -95,6 +96,22 @@ func printYAMLKeysForType(t reflect.Type) {
         return
     }
     fmt.Println(string(yamlData))
+}
+
+
+// formatDurationSeconds formats a time.Duration as "MMm:SS,sss" where
+// MM is minutes, SS is whole seconds, and sss is milliseconds
+// (e.g., 00m:05,123s, 01m:02,345s).
+func formatDurationSeconds(d time.Duration) string {
+	secondsTotal := float64(d) / float64(time.Second)
+	minutes := int(secondsTotal) / 60
+	seconds := secondsTotal - float64(minutes*60)
+
+	// Format seconds as SS.sss, then swap '.' for ','
+	secPart := fmt.Sprintf("%06.3fs", seconds) // e.g. "02.345s"
+	secPart = strings.Replace(secPart, ".", ",", 1)
+
+	return fmt.Sprintf("%02dm:%s", minutes, secPart)
 }
 
 
@@ -201,6 +218,7 @@ func exitApp(nonInteractive bool, code int) {
 	}
 	os.Exit(code)
 }
+
 
 func getTerminalWidth() int {
     // Get the file descriptor for terminal output

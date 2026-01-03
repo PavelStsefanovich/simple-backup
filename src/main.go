@@ -575,7 +575,7 @@ func (app *BackupApp) runBackup() error {
 			if errors.Is(err, os.ErrNotExist) {
 				logger.Err(fmt.Sprintf("\n❌ %v\n", err), style.NoLabel())
 			} else {
-				logger.Err(fmt.Sprintf("\n❌ (%v): %v\n", elapsed, err), style.NoLabel())
+				logger.Err(fmt.Sprintf("\n❌ (%s): %v\n", formatDurationSeconds(elapsed), err), style.NoLabel())
 			}
 
 			if app.exitOnError {
@@ -597,10 +597,12 @@ func (app *BackupApp) runBackup() error {
 			progressBarLength := 50
 			progressBar := strings.Repeat("■", progressBarLength)
 			logger.Plain(fmt.Sprintf("\r[%s] ", progressBar))
-			logger.Ok(fmt.Sprintf(" (%s)\n", result.Elapsed))
+			logger.Ok(fmt.Sprintf(" (%s)\n", formatDurationSeconds(result.Elapsed)))
 		}
 	}
 
+	totalElapsed := time.Since(startTime)
+	
 	// Cleanup old backups
 	if failedCount == 0 {
 		app.cleanupOldBackups()
@@ -622,14 +624,12 @@ func (app *BackupApp) runBackup() error {
 		}
 	}
 
-	totalElapsed := time.Since(startTime)
-
 	// Print summary
 	logger.Signature("\n===============  Backup  Summary  ===============\n")
 	logger.Plain("Backup destination: ")
 	logger.Info(fmt.Sprintf("%s\n", app.bkpDestFullPath), style.NoLabel())
 	// logger.Plain(fmt.Sprintf("Backup destination: %v\n", app.bkpDestFullPath))
-	logger.Plain(fmt.Sprintf("Total time: %v\n", totalElapsed))
+	logger.Plain(fmt.Sprintf("Total time: %s\n", formatDurationSeconds(totalElapsed)))
 	logger.Plain(fmt.Sprintf("Total items: %d\n", totalCount))
 	logger.Plain(fmt.Sprintf("Successful: %d\n", successCount))
 	logger.Plain(fmt.Sprintf("Failed: %d\n", failedCount))
@@ -645,7 +645,7 @@ func (app *BackupApp) runBackup() error {
 		if !result.Success {
 			status = "❌"
 		}
-		logger.Plain(fmt.Sprintf("[%d] %s %s (%v)\n", i+1, status, result.Item.Source, result.Elapsed))
+		logger.Plain(fmt.Sprintf("[%d] %s %s (%s)\n", i+1, status, result.Item.Source, formatDurationSeconds(result.Elapsed)))
 	}
 
 	if failedCount > 0 {
