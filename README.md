@@ -1,20 +1,21 @@
 # Simple Backup
 
-A cross-platform backup application written in Go that supports scheduled and on-demand file/directory backups with include/exclude patterns.
+A cross-platform backup application written in Go that executes on-demand file/directory backups with include/exclude patterns.
+
 
 ## Features
 
 - **Cross-platform**: Works on Windows, macOS, and Linux
-- **Scheduled backups**: Support for daily and weekly schedules
 - **Pattern matching**: Include/exclude patterns for fine-grained control
 - **Auto-discovery**: Automatically finds backup destinations
 - **Retention management**: Automatic cleanup of old backups
 - **Interactive mode**: User prompts for confirmation
-- **Detailed logging**: Progress tracking and summary reports
+- **Detailed logging**: Progress tracking and summary reports, support for logging to a file
 
-## Installation
 
-1. Make sure you have Go 1.21 or later installed
+## Build From Source
+
+1. Make sure you have Go 1.21 or later installed and discoverable
 2. Clone or download the source code
 3. Run the following commands in the project root directory:
 
@@ -36,183 +37,138 @@ GOOS=darwin GOARCH=amd64 go build -o simple-backup ./src
 GOOS=linux GOARCH=amd64 go build -o simple-backup ./src
 ```
 
+
 ## Configuration
 
-### Main Configuration File (config.yaml)
+### Main Configuration File (.smbkp.yaml)
 
+A YAML configuration file with the following structure is required for Simple Backup app:
+
+#### Full Template (Linux/MacOS)
 ```yaml
-bkp_dest_dir: PS.Backup
-
-# Comment out 'schedule' key to disable scheduled backups
-schedule:
-  type: weekly  # daily or weekly
-  day_of_the_week: Tuesday  # Only for weekly
-  interval: 1  # Every N days/weeks
-  time: "21:00"  # 24-hour format
+# `Drive Info` block is optional. If provided, it will be displayed during Backup Review stage,
+# (before backup starts) so that the user can visually confirm the destination media.
+drive_info:
+    name: Backup Drive Name
+    description: Backup drive description
+		# path: /mnt/backup #TODO @PS Implement using thing entry.
 
 retention:
-  backups_to_keep: 4
-  min_free_space: 100gb
+  # Number of previous backups to keep (min 1)
+  backups_to_keep: 3
+  # Minimum free space that is required to be available on the destination media (min 10mb)
+  # Accepted format: XXmb or XXgb
+  min_free_space: 10gb
 
+# Root directory on the destination media, where backups will be stored.
+# Each backup will create it's own unique folder under this path.
+bkp_dest_dir: SimpleBackups
+
+# List of the items to be backed up. Each item must specify `source` and `destination`,
+# where `source` is the path to a file or folder to be backed up,
+# and `destination` is path on the destination media relative to `bkp_dest_dir/bkp_unique_folder`.
 bkp_items:
-  - source: '/home/user/Documents/'
-    destination: 'home/user/Documents'
+  - source: '/home/MyUser/Documents/'
+    destination: 'MyUser/files'
+    # `Include` is optional. Allows to filter the child items
+    # to be included into backup if the `source` is a directory.
+    # Supports wildcards '*'. Defaults to all items.
     include:
       - '*.pdf'
       - 'important*'
+    # `Exclude` is optional. Allows to filter out the child items
+    # that are included from the `source` if it's a directory.
+    # Supports wildcards '*'. Takes priority over `include`.
     exclude:
       - 'temp*'
       - '.cache'
 ```
 
-### Backup Drive Configuration (.smbkp.yaml)
-
-Place this file in the root of your backup drive or mount point:
-
+#### Example of Backup Items config for Windows
 ```yaml
-backup_drive: true
-version: "1.0"
-description: "Simple Backup Drive Configuration"
+bkp_items:
+  - source: 'C:\Users\MyUser\'
+    destination: 'C\users\MyUser'
+    include:
+      - Documents
+      - '.*'
+    exclude:
+      - 'Documents\My *'
+      - .virtualenvs
 ```
+
+### How It Works
+1. **Loading Configuration**:
+  + By default, the app looks for the config file named `.smbkp.yaml` in the root of the available drives and known mount points.
+    + The first found file is used. The order is not guaranteed.
+    + If config file is found, the parent drive/mount will be used as the backup destination media.
+    + If config file is not found, the app will exit with error.
+  + User can specify the config file explicitly using `-c`/`-config` command line argument.
+    + When specified explicitly, the config file does not have to be located in the root
+      of the backup destination media, and can have any name.
+    + If config file is specified explicitly,
+      **the backup destination media must also be specified** using `-b`/`-bkp-dest` command line argument.
+
+2. **Backup Destination Media**:
+  + If the backup destination is specified using `-b`/`-bkp-dest` command line argument, uses that path.
+  + If config file is specified explicitly, uses that file,
+    Otherwise, looks for `.smbkp.yaml` in the root of `bkp-dest`.
+    If config file is not found, the app will exit with error.
+
+3. **Backup Execution**:
+  + The app validates the provided config and prints the details for user review and confirmation.
+    In non-interactive mode (`-n`/`-non-interactive`) it will proceed with backup immediately.
+  + The app creates `bkp_dest_dir` directory on the destination media if it does not exist.
+    Inside of it, the current run's timestamped backup directory `smbkp-YYYYMMDD-HHMMSS` is created.
+  + During backup, processes each backup item with include/exclude patterns.
+  + Tracks timing and success/failure for each item.
+
+4. **Cleanup**:
+  + If backup completed successfully, the app will delete the oldest timestamped backup directories
+    under `bkp_dest_dir`, if the number of directories is greater than `retention.backups_to_keep`.
+  + If backup finished with errors, the app will promt the user whether to delete the old backups.
+    In non-interactive mode (`-n`/`-non-interactive`) it will skip the deletion.
+
+5. **Logging**:
+  + Use `-l/-log-dir` command line argument to to enable logging to file
+    and to specify the directory where the timestamped log file will be stored.
+
 
 ## Usage
 
 ### Command Line Options
 
-- `-bkp-dest string`: Backup destination drive or mount
-- `-config string`: Path to configuration file (default: config.yaml)
-- `-exit-on-error`: Exit immediately on any copy operation failure
-- `-non-interactive`: Skip all user prompts
-- `-run-once`: Run backup once and exit (ignores schedule)
-- `-help`: Show help message
+| Option | Required? | Details |
+| ------ | --------- | ------- |
+| `-c`, `-config string` | no | Explicit path/name of backup configuration file. |
+| `-b`, `-bkp-dest string` | no | Explicit path to backup destination drive or mount. |
+| `-e`, `-exit-on-error` | no | Exit immediately on any copy operation failure. |
+| `-l`, `-log-dir` | no | Path to a directory to store log file. Also enables logging to file. |
+| `-n`, `-non-interactive` | no | Skip all user prompts. |
+| `-h`, `-help` | no | Show help message. |
+| `-v`, `-version` | no | Show version info. |
+
 
 ### Examples
 
 ```bash
-# Run backup once with auto-discovery
-./smbkp -run-once
+# Run backup with auto-descovery of the backup config/destination.
+./simple-backup
 
-# Run backup to specific destination
-./smbkp -run-once -bkp-dest /mnt/backup
+# Run backup to specific destination.
+# Requires that the destination media has valid `.smbkp.yaml` file in it's root.
+./simple-backup -bkp-dest /mnt/backup
+
+# Run backup with custom backup configuration file.
+# Configuration file must specify the destination media path.
+./simple-backup -config configs/bkp-config-01.yaml
 
 # Run in non-interactive mode
-./smbkp -run-once -non-interactive
+./simple-backup -non-interactive
 
-# Run scheduled backup (daemon mode)
-./smbkp
-
-# Use custom config file
-./smbkp -config /path/to/my-config.yaml -run-once
+# Run with logging to file
+./simple-backup -log-dir logs
 ```
-
-## How It Works
-
-1. **Configuration Loading**: Reads the YAML configuration file
-2. **Destination Discovery**:
-   - If `-bkp-dest` is provided, uses that path
-   - Otherwise, searches all available drives/mounts for `.smbkp.yaml`
-3. **Backup Execution**:
-   - Creates timestamped backup directory: `psbkp-YYYYMMDD-HHMMSS`
-   - Processes each backup item with include/exclude patterns
-   - Tracks timing and success/failure for each item
-4. **Cleanup**: Removes old backups based on retention settings
-
-## Directory Structure
-
-The backup creates the following structure:
-
-```
-<backup-drive>/
-├── .smbkp.yaml
-└── PS.Backup/
-    ├── psbkp-20240101-210000/
-    │   ├── home/user/Documents/
-    │   └── etc/config/
-    ├── psbkp-20240108-210000/
-    └── psbkp-20240115-210000/
-```
-
-## Include/Exclude Patterns
-
-- **Include patterns**: If specified, only matching files/directories are backed up
-- **Exclude patterns**: Take priority over include patterns
-- **Pattern matching**: Uses Go's `filepath.Match` (supports `*` and `?` wildcards)
-- **Directory handling**: Patterns apply to directory names and affect subdirectories
-
-### Pattern Examples
-
-```yaml
-include:
-  - '*.pdf'        # All PDF files
-  - 'Documents'    # Documents directory and contents
-  - '.*'          # All hidden files/directories
-
-exclude:
-  - 'temp*'       # Anything starting with 'temp'
-  - '.cache'      # Specific directory
-  - '*.tmp'       # All temporary files
-```
-
-## Scheduling
-
-The application supports two scheduling modes:
-
-### Daily Backups
-```yaml
-schedule:
-  type: daily
-  interval: 1    # Every day
-  time: "02:00"  # 2:00 AM
-```
-
-### Weekly Backups
-```yaml
-schedule:
-  type: weekly
-  day_of_the_week: Sunday
-  interval: 1    # Every week
-  time: "21:00"  # 9:00 PM
-```
-
-## Error Handling
-
-- **Interactive Mode**: Prompts user on errors if `exit-on-error` is enabled
-- **Non-Interactive Mode**: Exits immediately on errors if `exit-on-error` is enabled
-- **Continue Mode**: Logs errors and continues with remaining items (default)
-
-## Platform-Specific Notes
-
-### Windows
-- Drive letters: `C:\`, `D:\`, etc.
-- Path separators: Backslashes
-- Example source: `C:\Users\MyUser\`
-
-### macOS/Linux
-- Mount points: `/mnt`, `/media`, `/Volumes`
-- Path separators: Forward slashes
-- Example source: `/home/user/Documents/`
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"No backup destination found"**
-   - Ensure `.smbkp.yaml` exists in the root of your backup drive
-   - Check drive mounting and permissions
-
-2. **"Permission denied"**
-   - Run with appropriate permissions (sudo on Unix systems if needed)
-   - Check source and destination directory permissions
-
-3. **"Failed to create backup directory"**
-   - Verify backup destination has write permissions
-   - Check available disk space
-
-### Debug Tips
-
-- Use `-run-once` for testing without scheduling
-- Check file paths are correct for your operating system
-- Verify include/exclude patterns work as expected
 
 ## License
 

@@ -193,7 +193,7 @@ func main() {
 func printHelp() {
 	fmt.Println("\n================  Simple Backup  ================")
 	fmt.Println("\nUsage:")
-	fmt.Println("  smbkp [options]")
+	fmt.Println("  simple-backup(.exe) [options]")
 	fmt.Println("\nOptions:")
 	pflag.PrintDefaults()
 	fmt.Println("\nNote: If -bkp-dest is not specified, the app will search for any drives/mounts")
