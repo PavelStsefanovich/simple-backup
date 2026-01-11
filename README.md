@@ -136,17 +136,19 @@ bkp_items:
 
 ## Usage
 
+`simple-backup(.exe) [options]`
+
 ### Command Line Options
 
-| Option | Required? | Details |
-| ------ | --------- | ------- |
-| `-c`, `-config string` | no | Explicit path/name of backup configuration file. |
-| `-b`, `-bkp-dest string` | no | Explicit path to backup destination drive or mount. |
-| `-e`, `-exit-on-error` | no | Exit immediately on any copy operation failure. |
-| `-l`, `-log-dir` | no | Path to a directory to store log file. Also enables logging to file. |
-| `-n`, `-non-interactive` | no | Skip all user prompts. |
-| `-h`, `-help` | no | Show help message. |
-| `-v`, `-version` | no | Show version info. |
+| Option | Type | Required? | Details |
+| ------ | ---- | --------- | ------- |
+| `-c`, `-config` | string | no | Explicit path/name of backup configuration file. |
+| `-b`, `-bkp-dest` | string | no | Explicit path to backup destination drive or mount. |
+| `-l`, `-log-dir` | string | no | Path to a directory to store log file. Also enables logging to file. |
+| `-e`, `-exit-on-error` | bool | no | Exit immediately on any copy operation failure. |
+| `-n`, `-non-interactive` | bool |no | Skip all user prompts. |
+| `-h`, `-help` | bool |no | Show help message. |
+| `-v`, `-version` | bool |no | Show version info. |
 
 
 ### Examples
