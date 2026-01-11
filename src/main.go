@@ -440,10 +440,12 @@ func reviewBackupConfig(app *BackupApp) error {
 		}
 	}
 
+	// Non-Interactive mode: Skip user prompt and continue with backup
 	if app.nonInteractive {
 		return nil
 	}
 
+	// Interactive mode: Prompt user for confirmation before running backup
 	logger.Info("\nProceed with backup? (only \"yes\" will be accepted to confirm)\n", style.NoLabel())
 	var response string
 	fmt.Scanln(&response)
