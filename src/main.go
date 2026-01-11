@@ -48,7 +48,8 @@ type Config struct {
 		MinFreeSpace  		string `yaml:"min_free_space"`
 		minFreeSpaceParsed	uint64	// set implicitly by parsing MinFreeSpace
 	} `yaml:"retention"`
-	BkpItems []BackupItem `yaml:"bkp_items"`
+	DriveInfo *DriveInfo `yaml:"drive_info,omitempty"`
+	BkpItems  []BackupItem `yaml:"bkp_items"`
 }
 
 
@@ -58,6 +59,12 @@ type BackupItem struct {
 	Destination string   `yaml:"destination"`
 	Include     []string `yaml:"include,omitempty"`
 	Exclude     []string `yaml:"exclude,omitempty"`
+}
+
+// DRIVE INFO METADATA (optional)
+type DriveInfo struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
 }
 
 
@@ -402,6 +409,16 @@ func reviewBackupConfig(app *BackupApp) error {
 	logger.Plain(fmt.Sprintf("Config file: %s\n", app.configFile))
 	logger.Plain("Backup destination: ")
 	logger.Info(fmt.Sprintf("%s\n", app.bkpDestFullPath), style.NoLabel())
+
+	// Optional drive metadata
+	if app.BkpConfig.DriveInfo != nil {
+		if app.BkpConfig.DriveInfo.Name != "" {
+			logger.Sub(fmt.Sprintf("  Name: %s\n", app.BkpConfig.DriveInfo.Name))
+		}
+		if app.BkpConfig.DriveInfo.Description != "" {
+			logger.Sub(fmt.Sprintf("  Description: %s\n", app.BkpConfig.DriveInfo.Description))
+		}
+	}
 
 	// Validate min_free_space
 	logger.Plain(fmt.Sprintf("Minimum required free space: %s\n", app.BkpConfig.Retention.MinFreeSpace))
