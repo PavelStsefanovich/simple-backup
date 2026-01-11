@@ -19,6 +19,55 @@ const (
 	GB = 1024 * 1024 * 1024
 )
 
+// Embedded example configuration template, based on README.
+const defaultConfigTemplateYAML = "" +
+"# `Drive Info` block is optional. If provided, it will be displayed during Backup Review stage,\n" +
+"# (before backup starts) so that the user can visually confirm the destination media.\n" +
+"drive_info:\n" +
+"    name: Backup Drive Name\n" +
+"    description: Backup drive description\n" +
+"\n" +
+"retention:\n" +
+"  # Number of previous backups to keep (min 1)\n" +
+"  backups_to_keep: 3\n" +
+"  # Minimum free space that is required to be available on the destination media (min 10mb)\n" +
+"  # Accepted format: XXmb or XXgb\n" +
+"  min_free_space: 10gb\n" +
+"\n" +
+"# Root directory on the destination media, where backups will be stored.\n" +
+"# Each backup will create it's own unique folder under this path.\n" +
+"bkp_dest_dir: SimpleBackups\n" +
+"\n" +
+"# List of the items to be backed up. Each item must specify `source` and `destination`,\n" +
+"# where `source` is the path to a file or folder to be backed up,\n" +
+"# and `destination` is path on the destination media relative to `bkp_dest_dir/bkp_unique_folder`.\n" +
+"bkp_items:\n" +
+"  - source: '/home/MyUser/Documents/'\n" +
+"    destination: 'MyUser/files'\n" +
+"    # `Include` is optional. Allows to filter the child items\n" +
+"    # to be included into backup if the `source` is a directory.\n" +
+"    # Supports wildcards '*'. Defaults to all items.\n" +
+"    include:\n" +
+"      - '*.pdf'\n" +
+"      - 'important*'\n" +
+"    # `Exclude` is optional. Allows to filter out the child items\n" +
+"    # that are included from the `source` if it's a directory.\n" +
+"    # Supports wildcards '*'. Takes priority over `include`.\n" +
+"    exclude:\n" +
+"      - 'temp*'\n" +
+"      - '.cache'\n" +
+"\n" +
+"# Example of Backup Items config for Windows:\n" +
+"# bkp_items:\n" +
+"#   - source: 'C:\\Users\\MyUser\\'\n" +
+"#     destination: 'C\\users\\MyUser'\n" +
+"#     include:\n" +
+"#       - Documents\n" +
+"#       - '.*'\n" +
+"#     exclude:\n" +
+"#       - 'Documents\\My *'\n" +
+"#       - .virtualenvs\n"
+
 // getYAMLKeysRecursively inspects a Go type and returns a nested map
 // representing the YAML keys and subkeys, with empty placeholders for values.
 func getYAMLKeysRecursively(t reflect.Type) (interface{}, error) {
@@ -217,6 +266,29 @@ func exitApp(nonInteractive bool, code int) {
 		_, _ = reader.ReadString('\n')
 	}
 	os.Exit(code)
+}
+
+
+// Generate example configuration file at the given path.
+// Does not overwrite an existing file; returns the final file path on success.
+func generateExampleConfig(destPath string) (string, error) {
+	// Ensure destination directory exists
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return "", fmt.Errorf("creating directory %q: %w", filepath.Dir(destPath), err)
+	}
+
+	// Refuse to overwrite existing file
+	if _, err := os.Stat(destPath); err == nil {
+		return "", fmt.Errorf("file %q already exists; refusing to overwrite", destPath)
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("checking destination %q: %w", destPath, err)
+	}
+
+	if err := os.WriteFile(destPath, []byte(defaultConfigTemplateYAML), 0644); err != nil {
+		return "", fmt.Errorf("writing example config to %q: %w", destPath, err)
+	}
+
+	return destPath, nil
 }
 
 

@@ -125,10 +125,30 @@ func main() {
 		exitOnError    = pflag.BoolP("exit-on-error", "e", false, "Exit immediately on any copy operation failure.")
 		logDir         = pflag.StringP("log-dir", "l", "", "Path to a directory to store log file.")
 		nonInteractive = pflag.BoolP("non-interactive", "n", false, "Skip all user prompts.")
-		showHelp       = pflag.BoolP("help", "h", false, "Show help.")
-		showVersion    = pflag.BoolP("version", "v", false, "Show version info.")
+		initConfig     = pflag.BoolP("init-config", "i", false, "Generate example configuration file '.smbkp.yaml' and exit. Optionally accepts destination directory as the first positional argument.")
+		showHelp       = pflag.BoolP("help", "h", false, "Show help and exit.")
+		showVersion    = pflag.BoolP("version", "v", false, "Show version info and exit.")
 	)
 	pflag.Parse()
+
+	// Generate example configuration and exit (does not run backup)
+	if *initConfig {
+		// Default destination is current directory (./.smbkp.yaml)
+		destDir := "."
+		args := pflag.Args()
+		if len(args) > 0 && args[0] != "" {
+			destDir = args[0]
+		}
+
+		destPath, err := generateExampleConfig(filepath.Join(destDir, ConfigFileDefault))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to generate example config: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Example configuration file generated at %s\n", destPath)
+		return
+	}
 
 	// Show help
 	if *showHelp {
