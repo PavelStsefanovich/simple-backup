@@ -37,12 +37,6 @@ func Bold() Option {
 	return func(o *options) { o.bold = true }
 }
 
-// Label ensures that, when a default label is defined for the method, it will be shown.
-// Labels are now printed by default for labeled methods, so this is mainly for clarity.
-func Label() Option {
-	return func(o *options) { o.noLabel = false }
-}
-
 // NoLabel suppresses the default label (e.g. [INFO]) for Info/Warn/Err/Ok methods.
 func NoLabel() Option {
 	return func(o *options) { o.noLabel = true }

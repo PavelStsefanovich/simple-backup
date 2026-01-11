@@ -1,7 +1,9 @@
 package main
 
 import (
+    "bufio"
     "fmt"
+    "golang.org/x/term"
     "gopkg.in/yaml.v3"
     "os"
     "path/filepath"
@@ -9,6 +11,7 @@ import (
     "runtime"
 	"strconv"
     "strings"
+    "time"
 )
 
 const (
@@ -96,6 +99,22 @@ func printYAMLKeysForType(t reflect.Type) {
 }
 
 
+// formatDurationSeconds formats a time.Duration as "MMm:SS,sss" where
+// MM is minutes, SS is whole seconds, and sss is milliseconds
+// (e.g., 00m:05,123s, 01m:02,345s).
+func formatDurationSeconds(d time.Duration) string {
+	secondsTotal := float64(d) / float64(time.Second)
+	minutes := int(secondsTotal) / 60
+	seconds := secondsTotal - float64(minutes*60)
+
+	// Format seconds as SS.sss, then swap '.' for ','
+	secPart := fmt.Sprintf("%06.3fs", seconds) // e.g. "02.345s"
+	secPart = strings.Replace(secPart, ".", ",", 1)
+
+	return fmt.Sprintf("%02dm:%s", minutes, secPart)
+}
+
+
 // formatBytes converts a size in bytes to a human-readable string in MB or GB.
 func formatBytes(bytes uint64) string {
 	if bytes < GB {
@@ -164,4 +183,54 @@ func getAvailableDrives() ([]string, error) {
 	}
 
 	return drives, nil
+}
+
+
+// isWindowsProtectedPath returns true for known system-protected entries on Windows
+// that we should skip if we hit permission errors while walking the filesystem.
+func isWindowsProtectedPath(path string, err error) bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+
+	base := filepath.Base(path)
+	switch base {
+	case "System Volume Information", "$RECYCLE.BIN":
+		return true
+	}
+
+	// As a fallback, treat generic permission-denied errors on Windows as skippable
+	// for counting/copying purposes when walking.
+	if os.IsPermission(err) {
+		return true
+	}
+
+	return false
+}
+
+
+// EXIT APP WITH OPTIONAL INTERACTIVE PAUSE
+func exitApp(nonInteractive bool, code int) {
+	if !nonInteractive {
+		logger.Plain("Press Enter to exit...")
+		reader := bufio.NewReader(os.Stdin)
+		_, _ = reader.ReadString('\n')
+	}
+	os.Exit(code)
+}
+
+
+func getTerminalWidth() int {
+    // Get the file descriptor for terminal output
+    fd := int(os.Stdout.Fd())
+
+    // Get width and height
+    width, _, err := term.GetSize(fd)
+
+    if err != nil {
+        // Handle case where output is redirected to a file/pipe
+        return 70 // return a hard limit of 70 chars
+    }
+
+    return width
 }
