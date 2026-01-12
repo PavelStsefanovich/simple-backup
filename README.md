@@ -144,6 +144,7 @@ bkp_items:
 | `-c`, `-config` | string | no | Explicit path/name of backup configuration file. |
 | `-b`, `-bkp-dest` | string | no | Explicit path to backup destination drive or mount. |
 | `-l`, `-log-dir` | string | no | Path to a directory to store log file. Also enables logging to file. |
+| `-i`, `-init-config` | string | no | Generate example configuration file '.smbkp.yaml' and exit. Optionally accepts destination directory as the first positional argument. |
 | `-e`, `-exit-on-error` | bool | no | Exit immediately on any copy operation failure. |
 | `-n`, `-non-interactive` | bool |no | Skip all user prompts. |
 | `-h`, `-help` | bool |no | Show help message. |
@@ -153,6 +154,12 @@ bkp_items:
 ### Examples
 
 ```bash
+# Generate backup configuration YAML template file.
+./simple-backup -init-config # creates "./.smbkp.yaml"
+
+# Generate backup configuration YAML template file in the root of destination media.
+./simple-backup -init-config /mnt/your_backup_drive # creates "/mnt/your_backup_drive/.smbkp.yaml"
+
 # Run backup with auto-descovery of the backup config/destination.
 ./simple-backup
 
