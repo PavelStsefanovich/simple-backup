@@ -51,7 +51,6 @@ A YAML configuration file with the following structure is required for Simple Ba
 drive_info:
     name: Backup Drive Name
     description: Backup drive description
-		# path: /mnt/backup #TODO @PS Implement using thing entry.
 
 retention:
   # Number of previous backups to keep (min 1)
