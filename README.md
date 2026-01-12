@@ -147,8 +147,8 @@ bkp_items:
 | `-i`, `-init-config` | string | no | Generate example configuration file '.smbkp.yaml' and exit. Optionally accepts destination directory as the first positional argument. |
 | `-e`, `-exit-on-error` | bool | no | Exit immediately on any copy operation failure. |
 | `-n`, `-non-interactive` | bool |no | Skip all user prompts. |
-| `-h`, `-help` | bool |no | Show help message. |
-| `-v`, `-version` | bool |no | Show version info. |
+| `-h`, `-help` | bool |no | Show help message and exit. |
+| `-v`, `-version` | bool |no | Show version info and exit. |
 
 
 ### Examples
