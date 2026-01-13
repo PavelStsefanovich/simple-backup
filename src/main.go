@@ -5,13 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/spf13/pflag"
-	"golang.org/x/sys/windows"
 	"gopkg.in/yaml.v3"
 	"io"
 	"log"
 	"os"
 	"regexp"
-	"runtime"
 	"path/filepath"
 	"simple-backup/src/style"
 	"strings"
@@ -87,27 +85,6 @@ type BackupApp struct {
 	nonInteractive  bool
 }
 
-
-
-//////////////  INIT FUNCTIONS  ///////////////////////////////////////////////
-
-func init() {
-	// Fixes Virtual Terminal Processing in elevated terminal on Windows.
-    if runtime.GOOS == "windows" {
-        stdout := windows.Handle(os.Stdout.Fd())
-        var originalMode uint32
-
-        // Get the current console mode
-        windows.GetConsoleMode(stdout, &originalMode)
-        
-        // Add the Virtual Terminal Processing flag
-        // 0x0004 is the hex value for ENABLE_VIRTUAL_TERMINAL_PROCESSING
-        newMode := originalMode | windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING
-        
-        // Set the new mode
-        windows.SetConsoleMode(stdout, newMode)
-    }
-}
 
 
 // ENTRY POINT
