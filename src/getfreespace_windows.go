@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"golang.org/x/sys/windows"
+	"os"
 	"runtime"
 	"syscall"
 	"unsafe"
