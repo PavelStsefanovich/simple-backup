@@ -63,7 +63,7 @@ jobs:
         if [[ "$version" != v* ]]; then
           version="v$version"
         fi
-        echo "release_version=${version}.${{ github.run_number }}" >> $GITHUB_ENV
+        echo "release_version=${version}" >> $GITHUB_ENV
 
     - name: Create Release
       if: github.event.inputs.create_release == 'true'
