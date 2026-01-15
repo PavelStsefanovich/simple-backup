@@ -8,9 +8,23 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a new release'
+        required: true
+        type: boolean
+        default: false
+      release_version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: false
+        type: string
+      release_description:
+        description: 'Release description'
+        required: false
+        type: string
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
     steps:
@@ -19,10 +33,42 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.20'
+        go-version: '1.24'
 
-    - name: Build
-      run: go build -v ./...
+    - name: Build for Linux
+      run: GOOS=linux GOARCH=amd64 go build -o simple-backup-linux ./src
 
-    - name: Test
-      run: go test -v ./...
+    - name: Build for macOS
+      run: GOOS=darwin GOARCH=amd64 go build -o simple-backup-macos ./src
+
+    - name: Build for Windows
+      run: GOOS=windows GOARCH=amd64 go build -o simple-backup.exe ./src
+
+    - name: Publish Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: simple-backup-binaries
+        path: |
+          simple-backup-linux
+          simple-backup-macos
+          simple-backup.exe
+
+    - name: Get Release Version
+      if: github.event.inputs.create_release == 'true'
+      id: get_release_version
+      run: |
+        version="${{ github.event.inputs.release_version }}"
+        if [[ "$version" != v* ]]; then
+          version="v$version"
+        fi
+        echo "release_version=${version}.${{ github.run_number }}" >> $GITHUB_ENV
+
+    - name: Create Release
+      if: github.event.inputs.create_release == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release create ${{ env.release_version }} \
+          --title "${{ env.release_version }}" \
+          --notes "${{ github.event.inputs.release_description }}" \
+          simple-backup-linux simple-backup-macos simple-backup.exe
