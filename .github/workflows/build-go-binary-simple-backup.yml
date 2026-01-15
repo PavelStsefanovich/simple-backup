@@ -63,7 +63,7 @@ jobs:
         if [[ "$version" != v* ]]; then
           version="v$version"
         fi
-        echo "release_version=${version}.${{ github.run_number }}" >> $GITHUB_ENV
+        echo "release_version=${version} >> $GITHUB_ENV
 
     - name: Create Release
       if: github.event.inputs.create_release == 'true'
@@ -72,5 +72,5 @@ jobs:
       run: |
         gh release create ${{ env.release_version }} \
           --title "${{ env.release_version }}" \
-          --notes "${{ github.event.inputs.release_description }}" \
+          --notes "${{ github.event.inputs.release_description }}\n(run number: ${{ github.run_number }})" \
           simple-backup-linux simple-backup-macos simple-backup.exe
