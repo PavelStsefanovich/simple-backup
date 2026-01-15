@@ -69,8 +69,11 @@ jobs:
       if: github.event.inputs.create_release == 'true'
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RELEASE_NOTES: |
+          ${{ github.event.inputs.release_description }}
+          (run number: ${{ github.run_number }})
       run: |
         gh release create ${{ env.release_version }} \
           --title "${{ env.release_version }}" \
-          --notes "${{ github.event.inputs.release_description }}\n(run number: ${{ github.run_number }})" \
+          --notes "$RELEASE_NOTES" \
           simple-backup-linux simple-backup-macos simple-backup.exe
