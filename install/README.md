@@ -14,7 +14,4 @@ Examples
 
 # Install for specific destination drive
 .\install.ps1 -ExecutablePath path\to\simple-backup.exe -ShortcutName "SimpleBackup-BkpDrive_E" -Arguments "-bkp-dest E:\"
-
-# Install to always run as Admin
-.\install.ps1 -ExecutablePath path\to\simple-backup.exe -Admin
 ```
